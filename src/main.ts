@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import './style.css';
-import { Store } from './state.js';
+import { Store, createInitialState } from './state.js';
 import { Renderer } from './renderer.js';
 import { InputController } from './input.js';
 import { radialLayout } from './layout.js';
@@ -78,6 +78,22 @@ function main(): void {
     saveToLocalStorage(store.getState());
     flashStatus('Saved to browser storage');
   });
+  window.addEventListener('mindforge:new-map', () => newMap(store, input));
+}
+
+/**
+ * Replace the current map with a fresh empty one. If the current map
+ * has more than just the root node, ask the user to confirm — the
+ * undo stack is cleared by `store.replace`, so this is destructive.
+ */
+function newMap(store: Store, input: InputController): void {
+  const state = store.getState();
+  if (Object.keys(state.nodes).length > 1) {
+    if (!window.confirm('Discard the current map and start a new one?')) return;
+  }
+  store.replace(createInitialState());
+  input.runAutoLayout();
+  flashStatus('New map created');
 }
 
 /**
@@ -100,6 +116,7 @@ function bindToolbar(
 ): void {
   const byId = (id: string): HTMLElement | null => document.getElementById(id);
 
+  byId('tb-new')?.addEventListener('click', () => newMap(store, input));
   byId('tb-add-child')?.addEventListener('click', () => {
     const sel = store.getState().selectedId ?? store.getState().rootId;
     store.addChild(sel, '');

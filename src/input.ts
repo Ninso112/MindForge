@@ -206,6 +206,11 @@ export class InputController {
       openFromFile(state.theme).then((s) => this.store.replace(s)).catch(() => { /* user cancelled */ });
       return;
     }
+    if (ctrl && e.shiftKey && e.key.toLowerCase() === 'n') {
+      e.preventDefault();
+      window.dispatchEvent(new CustomEvent('mindforge:new-map'));
+      return;
+    }
     if (ctrl && e.shiftKey && e.key.toLowerCase() === 'p') {
       e.preventDefault();
       exportPng(state, this.renderer).catch((err: unknown) => {
