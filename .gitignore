@@ -1,0 +1,89 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build output
+dist/
+build/
+out/
+.vite/
+*.tsbuildinfo
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.log
+
+# Editor and IDE
+.vscode/
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+*~
+
+# Operating system
+# Linux
+*~
+.directory
+.Trash-*
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+# macOS (in case contributors are on Mac)
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Lockfiles (keep package-lock.json, ignore others by convention)
+yarn.lock
+pnpm-lock.yaml
+
+# Coverage
+coverage/
+.nyc_output/
+
+# Claude Code
+.claude/
+CLAUDE.md
+.claude.json
+.claude.local.json
+
+# AI assistants and tooling
+.cursor/
+.aider*
+.continue/
+.codeium/
+.github-copilot/
+
+# Caches
+.cache/
+.parcel-cache/
+.turbo/
+.next/
+.nuxt/
+.svelte-kit/
+.temp/
+.tmp/
+tmp/
+temp/
+
+# Misc
+*.bak
+*.orig
+*.rej
+.history/
+.local/

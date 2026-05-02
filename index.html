@@ -1,0 +1,61 @@
+<!--
+  SPDX-License-Identifier: GPL-3.0-or-later
+  MindForge — keyboard-driven mind mapping in the browser.
+-->
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="dark light" />
+    <title>MindForge</title>
+  </head>
+  <body>
+    <div id="app"></div>
+
+    <nav class="mf-toolbar" aria-label="MindForge toolbar">
+      <button id="tb-add-child" type="button" title="Add child (Tab)">+ Child</button>
+      <button id="tb-add-sibling" type="button" title="Add sibling (Enter)">+ Sibling</button>
+      <button id="tb-delete" type="button" title="Delete node (Del)">Delete</button>
+      <span class="mf-toolbar__sep" aria-hidden="true"></span>
+      <button id="tb-reset" type="button" title="Reset layout">Reset Layout</button>
+      <button id="tb-export" type="button" title="Export (Ctrl+E)">Export</button>
+      <button id="tb-import" type="button" title="Import (Ctrl+O)">Import</button>
+      <span class="mf-toolbar__sep" aria-hidden="true"></span>
+      <button id="tb-theme" type="button" title="Toggle theme">Theme</button>
+      <button id="tb-help" type="button" title="Show keyboard help (?)">?</button>
+    </nav>
+
+    <div id="status" class="mf-status" role="status" aria-live="polite"></div>
+
+    <div id="help-overlay" class="mf-help" role="dialog" aria-modal="true" aria-labelledby="help-title">
+      <div class="mf-help__panel">
+        <button id="help-close" class="mf-help__close" type="button" aria-label="Close help">×</button>
+        <h2 id="help-title">Keyboard shortcuts</h2>
+        <table>
+          <tbody>
+            <tr><td><kbd>Tab</kbd></td><td>Add child node</td></tr>
+            <tr><td><kbd>Enter</kbd></td><td>Add sibling node</td></tr>
+            <tr><td><kbd>F2</kbd> or double-click</td><td>Edit selected node</td></tr>
+            <tr><td><kbd>Delete</kbd> / <kbd>Backspace</kbd></td><td>Delete node and subtree</td></tr>
+            <tr><td><kbd>Esc</kbd></td><td>Cancel edit / deselect</td></tr>
+            <tr><td>Arrow keys</td><td>Navigate between nodes</td></tr>
+            <tr><td>Drag</td><td>Move node freely (pins it)</td></tr>
+            <tr><td>Middle-click drag / <kbd>Space</kbd>+drag</td><td>Pan canvas</td></tr>
+            <tr><td><kbd>Ctrl</kbd> + Scroll</td><td>Zoom in / out</td></tr>
+            <tr><td><kbd>Ctrl</kbd>+<kbd>Z</kbd> / <kbd>Ctrl</kbd>+<kbd>Y</kbd></td><td>Undo / redo</td></tr>
+            <tr><td><kbd>Ctrl</kbd>+<kbd>S</kbd></td><td>Save to localStorage</td></tr>
+            <tr><td><kbd>Ctrl</kbd>+<kbd>E</kbd></td><td>Export as JSON</td></tr>
+            <tr><td><kbd>Ctrl</kbd>+<kbd>O</kbd></td><td>Import JSON</td></tr>
+            <tr><td><kbd>?</kbd></td><td>Toggle this help</td></tr>
+          </tbody>
+        </table>
+        <p class="mf-help__footer">
+          MindForge — free software, GPL v3.
+        </p>
+      </div>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
