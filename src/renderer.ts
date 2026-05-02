@@ -185,8 +185,16 @@ export class Renderer {
       path.setAttribute('d', bezierPath(x1, y1, x2, y2));
       path.setAttribute('class', 'mf-edge');
       const depth = depthOf(state, id, depthCache);
-      const colorVar = DEPTH_COLOR_VARS[((depth - 1) % DEPTH_COLOR_VARS.length + DEPTH_COLOR_VARS.length) % DEPTH_COLOR_VARS.length];
-      path.setAttribute('stroke', `var(${colorVar})`);
+      let stroke: string;
+      if (node.color) {
+        // The incoming edge inherits the child node's override so the
+        // colored subtree reads as a single visual unit.
+        stroke = node.color;
+      } else {
+        const colorVar = DEPTH_COLOR_VARS[((depth - 1) % DEPTH_COLOR_VARS.length + DEPTH_COLOR_VARS.length) % DEPTH_COLOR_VARS.length];
+        stroke = `var(${colorVar})`;
+      }
+      path.setAttribute('stroke', stroke);
       this.edgesGroup.appendChild(path);
     }
 

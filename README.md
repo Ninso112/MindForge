@@ -19,9 +19,10 @@ Designed for power users: every action has a keyboard shortcut, and the auto-lay
 - Radial-tree auto-layout that respects manually pinned positions
 - Undo/redo (50 step history)
 - Auto-save to `localStorage` plus JSON import/export
+- PNG, PDF, and SVG export of the full map
 - Pan, zoom (10–300%), and free-drag interaction
 - Dark and light themes (follows `prefers-color-scheme`)
-- Depth-based color cycling for visual hierarchy
+- Depth-based color cycling, with a 32-color palette for per-node overrides
 - Cross-platform (Linux-first, Windows-compatible)
 - TypeScript strict mode, no runtime dependencies
 
@@ -68,6 +69,10 @@ Click anywhere to start. The root node is created automatically. Press `?` at an
 | Save to localStorage | `Ctrl` + `S` |
 | Export JSON | `Ctrl` + `E` |
 | Import JSON | `Ctrl` + `O` |
+| Open color picker | `C` |
+| Export PNG | `Ctrl` + `Shift` + `P` |
+| Export PDF (print dialog) | `Ctrl` + `Shift` + `D` |
+| Export SVG | `Ctrl` + `Shift` + `S` |
 | Toggle theme | (toolbar button) |
 | Reset layout | (toolbar button) |
 | Show keyboard help | `?` |

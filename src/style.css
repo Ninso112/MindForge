@@ -310,3 +310,67 @@ body {
   color: var(--mf-fg-muted);
   text-align: center;
 }
+
+/* Color picker popover */
+.mf-color-picker {
+  position: absolute;
+  z-index: 15;
+  padding: 8px;
+  background: var(--mf-toolbar-bg);
+  border: 1px solid var(--mf-toolbar-border);
+  border-radius: 10px;
+  box-shadow: var(--mf-shadow);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  user-select: none;
+}
+
+.mf-color-picker__grid {
+  display: grid;
+  grid-template-columns: repeat(8, 22px);
+  grid-auto-rows: 22px;
+  gap: 4px;
+}
+
+.mf-color-picker__swatch {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  cursor: pointer;
+  padding: 0;
+  appearance: none;
+  transition: transform 80ms ease;
+}
+
+.mf-color-picker__swatch:hover {
+  transform: scale(1.12);
+}
+
+.mf-color-picker__swatch:focus-visible {
+  outline: 2px solid var(--mf-selection);
+  outline-offset: 2px;
+}
+
+.mf-color-picker__swatch--active {
+  outline: 2px solid var(--mf-selection);
+  outline-offset: 2px;
+}
+
+.mf-color-picker__default {
+  margin-top: 8px;
+  width: 100%;
+  padding: 5px 8px;
+  font: inherit;
+  font-size: 12px;
+  background: transparent;
+  color: var(--mf-fg-muted);
+  border: 1px solid var(--mf-toolbar-border);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.mf-color-picker__default:hover {
+  background: var(--mf-button-hover);
+  color: var(--mf-fg);
+}

@@ -11,6 +11,8 @@ import {
   openFromFile,
   saveToLocalStorage
 } from './serializer.js';
+import { exportPdf, exportPng, exportSvg } from './export.js';
+import { openColorPicker } from './colorPicker.js';
 
 /**
  * Entry point: build the store, renderer, and input controller, wire up
@@ -53,10 +55,17 @@ function main(): void {
   window.addEventListener('resize', () => renderer.applyViewport(store.getState()));
 
   // Toolbar wiring.
-  bindToolbar(store, input);
+  bindToolbar(store, input, canvas, renderer);
 
   // Help overlay.
   bindHelpOverlay();
+
+  // Color-picker open requests come from the input layer.
+  window.addEventListener('mindforge:open-color-picker', (e) => {
+    const detail = (e as CustomEvent<{ nodeId: string }>).detail;
+    if (!detail?.nodeId) return;
+    openColorPicker(canvas, renderer, store, detail.nodeId);
+  });
 
   // Persistence: every 30s and on unload.
   const AUTOSAVE_INTERVAL_MS = 30_000;
@@ -83,7 +92,12 @@ function applyTheme(theme: 'light' | 'dark'): void {
  * Attach click handlers to the floating toolbar. The HTML markup lives
  * in `index.html`; we bind by id here.
  */
-function bindToolbar(store: Store, input: InputController): void {
+function bindToolbar(
+  store: Store,
+  input: InputController,
+  canvas: HTMLElement,
+  renderer: Renderer
+): void {
   const byId = (id: string): HTMLElement | null => document.getElementById(id);
 
   byId('tb-add-child')?.addEventListener('click', () => {
@@ -102,6 +116,10 @@ function bindToolbar(store: Store, input: InputController): void {
     const sel = store.getState().selectedId;
     if (sel) store.deleteNode(sel);
   });
+  byId('tb-color')?.addEventListener('click', () => {
+    const sel = store.getState().selectedId;
+    if (sel) openColorPicker(canvas, renderer, store, sel);
+  });
   byId('tb-reset')?.addEventListener('click', () => {
     store.resetPins();
     const positions = radialLayout(store.getState());
@@ -109,6 +127,18 @@ function bindToolbar(store: Store, input: InputController): void {
   });
   byId('tb-export')?.addEventListener('click', () => {
     downloadAsFile(store.getState());
+  });
+  byId('tb-export-png')?.addEventListener('click', () => {
+    exportPng(store.getState(), renderer).catch((err: unknown) => {
+      // eslint-disable-next-line no-console
+      console.warn('PNG export failed:', err);
+    });
+  });
+  byId('tb-export-pdf')?.addEventListener('click', () => {
+    exportPdf(store.getState(), renderer);
+  });
+  byId('tb-export-svg')?.addEventListener('click', () => {
+    exportSvg(store.getState(), renderer);
   });
   byId('tb-import')?.addEventListener('click', () => {
     openFromFile(store.getState().theme)

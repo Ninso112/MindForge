@@ -4,6 +4,7 @@ import type { Renderer } from './renderer.js';
 import type { Store } from './state.js';
 import { radialLayout } from './layout.js';
 import { downloadAsFile, openFromFile } from './serializer.js';
+import { exportPdf, exportPng, exportSvg } from './export.js';
 
 const ZOOM_MIN = 0.1;
 const ZOOM_MAX = 3.0;
@@ -205,10 +206,36 @@ export class InputController {
       openFromFile(state.theme).then((s) => this.store.replace(s)).catch(() => { /* user cancelled */ });
       return;
     }
+    if (ctrl && e.shiftKey && e.key.toLowerCase() === 'p') {
+      e.preventDefault();
+      exportPng(state, this.renderer).catch((err: unknown) => {
+        // eslint-disable-next-line no-console
+        console.warn('PNG export failed:', err);
+      });
+      return;
+    }
+    if (ctrl && e.shiftKey && e.key.toLowerCase() === 'd') {
+      e.preventDefault();
+      exportPdf(state, this.renderer);
+      return;
+    }
+    if (ctrl && e.shiftKey && e.key.toLowerCase() === 's') {
+      e.preventDefault();
+      exportSvg(state, this.renderer);
+      return;
+    }
 
     if (e.key === '?' || (e.shiftKey && e.key === '/')) {
       e.preventDefault();
       window.dispatchEvent(new CustomEvent('mindforge:toggle-help'));
+      return;
+    }
+
+    if (!ctrl && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'c' && state.selectedId !== null) {
+      e.preventDefault();
+      window.dispatchEvent(new CustomEvent('mindforge:open-color-picker', {
+        detail: { nodeId: state.selectedId }
+      }));
       return;
     }
 

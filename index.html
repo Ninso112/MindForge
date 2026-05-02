@@ -17,9 +17,13 @@
       <button id="tb-add-child" type="button" title="Add child (Tab)">+ Child</button>
       <button id="tb-add-sibling" type="button" title="Add sibling (Enter)">+ Sibling</button>
       <button id="tb-delete" type="button" title="Delete node (Del)">Delete</button>
+      <button id="tb-color" type="button" title="Color (C)">Color</button>
       <span class="mf-toolbar__sep" aria-hidden="true"></span>
       <button id="tb-reset" type="button" title="Reset layout">Reset Layout</button>
-      <button id="tb-export" type="button" title="Export (Ctrl+E)">Export</button>
+      <button id="tb-export" type="button" title="Export JSON (Ctrl+E)">Export</button>
+      <button id="tb-export-png" type="button" title="Export PNG (Ctrl+Shift+P)">PNG</button>
+      <button id="tb-export-pdf" type="button" title="Export PDF (Ctrl+Shift+D)">PDF</button>
+      <button id="tb-export-svg" type="button" title="Export SVG (Ctrl+Shift+S)">SVG</button>
       <button id="tb-import" type="button" title="Import (Ctrl+O)">Import</button>
       <span class="mf-toolbar__sep" aria-hidden="true"></span>
       <button id="tb-theme" type="button" title="Toggle theme">Theme</button>
@@ -47,6 +51,10 @@
             <tr><td><kbd>Ctrl</kbd>+<kbd>S</kbd></td><td>Save to localStorage</td></tr>
             <tr><td><kbd>Ctrl</kbd>+<kbd>E</kbd></td><td>Export as JSON</td></tr>
             <tr><td><kbd>Ctrl</kbd>+<kbd>O</kbd></td><td>Import JSON</td></tr>
+            <tr><td><kbd>C</kbd></td><td>Open color picker for selected node</td></tr>
+            <tr><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd></td><td>Export as PNG</td></tr>
+            <tr><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>D</kbd></td><td>Export as PDF (print dialog)</td></tr>
+            <tr><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd></td><td>Export as SVG</td></tr>
             <tr><td><kbd>?</kbd></td><td>Toggle this help</td></tr>
           </tbody>
         </table>

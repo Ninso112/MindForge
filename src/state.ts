@@ -285,6 +285,24 @@ export class Store {
   }
 
   /**
+   * Override or clear the per-node fill color. Pass `null` to revert to
+   * the depth-based palette. Records history so the change is undoable.
+   */
+  setNodeColor(id: string, color: string | null): void {
+    const cur = this.state.nodes[id]?.color ?? null;
+    if (cur === color) return;
+    this.commit((d) => {
+      const n = d.nodes[id];
+      if (!n) return;
+      if (color === null) {
+        delete n.color;
+      } else {
+        n.color = color;
+      }
+    });
+  }
+
+  /**
    * Move a node to absolute world coordinates. Sets `pinned = true` so
    * subsequent auto-layout passes leave it alone. Use within `silent`
    * for drag operations to avoid spamming undo history; the caller
