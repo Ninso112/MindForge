@@ -9,8 +9,8 @@ Be respectful and constructive. Disagreements are fine; personal attacks are not
 ## Getting started
 
 ```bash
-git clone https://github.com/your-org/mindforge.git
-cd mindforge
+git clone https://github.com/Ninso112/MindForge.git
+cd MindForge
 npm install
 npm run dev
 ```
@@ -75,6 +75,7 @@ Group logically related changes into a single commit. Avoid drive-by formatting 
 3. Verify locally:
    - `npm run lint`
    - `npm run build`
+   - `npm test`
    - Manual smoke test in the browser (add/edit/delete nodes, undo/redo, export/import).
 4. Open the PR with a clear description of what changed and why. Include screenshots or a short clip for UI changes.
 5. Address review feedback by adding new commits; squash on merge.

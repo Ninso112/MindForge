@@ -40,16 +40,18 @@ export function deserialize(raw: unknown, currentTheme: 'light' | 'dark'): AppSt
   const nodes: Record<string, MindNode> = {};
   for (const n of obj['nodes'] as unknown[]) {
     const node = validateNode(n);
+    if (nodes[node.id]) {
+      throw new Error(`Invalid map file: duplicate node id ${node.id}`);
+    }
     nodes[node.id] = node;
   }
-  if (!nodes[obj['rootId']]) {
-    throw new Error('Invalid map file: rootId does not refer to any node');
-  }
+  const rootId = obj['rootId'];
+  validateGraph(nodes, rootId);
   const vp = obj['viewport'] as Record<string, unknown> | undefined;
   return {
     nodes,
-    rootId: obj['rootId'],
-    selectedId: obj['rootId'],
+    rootId,
+    selectedId: rootId,
     editingId: null,
     viewport: {
       x: typeof vp?.['x'] === 'number' ? vp['x'] : 0,
@@ -58,6 +60,58 @@ export function deserialize(raw: unknown, currentTheme: 'light' | 'dark'): AppSt
     },
     theme: currentTheme
   };
+}
+
+/**
+ * Reject malformed graphs that would otherwise crash the renderer or
+ * layout (cycles cause unbounded recursion in `depthOf`/`radialLayout`,
+ * dangling references silently drop data). Walks the parent chain from
+ * every node and bails when the hop count exceeds the node count.
+ */
+function validateGraph(nodes: Record<string, MindNode>, rootId: string): void {
+  const root = nodes[rootId];
+  if (!root) {
+    throw new Error('Invalid map file: rootId does not refer to any node');
+  }
+  if (root.parentId !== null) {
+    throw new Error('Invalid map file: root must have parentId === null');
+  }
+  const total = Object.keys(nodes).length;
+  for (const node of Object.values(nodes)) {
+    for (const childId of node.children) {
+      const child = nodes[childId];
+      if (!child) {
+        throw new Error(`Invalid map file: node ${node.id} references missing child ${childId}`);
+      }
+      if (child.parentId !== node.id) {
+        throw new Error(`Invalid map file: child ${childId} parentId does not match parent ${node.id}`);
+      }
+    }
+    if (node.id === rootId) continue;
+    if (node.parentId === null) {
+      throw new Error(`Invalid map file: non-root node ${node.id} has null parentId`);
+    }
+    const parent = nodes[node.parentId];
+    if (!parent) {
+      throw new Error(`Invalid map file: node ${node.id} parentId ${node.parentId} does not exist`);
+    }
+    if (!parent.children.includes(node.id)) {
+      throw new Error(`Invalid map file: node ${node.id} not listed in parent ${node.parentId} children`);
+    }
+    let cur: string | null = node.parentId;
+    let hops = 0;
+    while (cur !== null) {
+      if (hops > total) {
+        throw new Error(`Invalid map file: cycle detected reaching from ${node.id}`);
+      }
+      const ancestor: MindNode | undefined = nodes[cur];
+      if (!ancestor) {
+        throw new Error(`Invalid map file: node ${node.id} ancestor ${cur} does not exist`);
+      }
+      cur = ancestor.parentId;
+      hops++;
+    }
+  }
 }
 
 /**
@@ -94,16 +148,20 @@ function validateNode(raw: unknown): MindNode {
 }
 
 /**
- * Persist the current state to `localStorage`. Silently swallows
- * `QuotaExceededError` since it is not actionable for the user mid-edit.
+ * Persist the current state to `localStorage`. Returns `true` on success,
+ * `false` when the write fails (e.g. `QuotaExceededError`, private-mode
+ * restrictions). Callers can surface a UI warning on `false` so the user
+ * knows their autosave was lost.
  */
-export function saveToLocalStorage(state: AppState): void {
+export function saveToLocalStorage(state: AppState): boolean {
   try {
     const data = JSON.stringify(serialize(state));
     localStorage.setItem(STORAGE_KEY, data);
+    return true;
   } catch (err) {
     // eslint-disable-next-line no-console
     console.warn('MindForge: localStorage save failed', err);
+    return false;
   }
 }
 

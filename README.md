@@ -1,10 +1,12 @@
 # MindForge
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
-[![Build](https://img.shields.io/badge/build-pending-lightgrey.svg)](#)
+[![CI](https://github.com/Ninso112/MindForge/actions/workflows/ci.yml/badge.svg)](https://github.com/Ninso112/MindForge/actions/workflows/ci.yml)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6.svg)](tsconfig.json)
 
 A fast, keyboard-driven, open-source mind mapping web application — an alternative to MindMup.
+
+**[Live demo →](https://ninso112.github.io/MindForge/)**
 
 ## About
 
@@ -17,7 +19,7 @@ Designed for power users: every action has a keyboard shortcut, and the auto-lay
 - Keyboard-first workflow (Tab, Enter, Arrow keys, Delete)
 - SVG rendering with bezier-curve connectors
 - Radial-tree auto-layout that respects manually pinned positions
-- Undo/redo (50 step history)
+- Undo/redo (100 step history)
 - Auto-save to `localStorage` plus JSON import/export
 - PNG, PDF, and SVG export of the full map
 - Pan, zoom (10–300%), and free-drag interaction
@@ -31,8 +33,8 @@ Designed for power users: every action has a keyboard shortcut, and the auto-lay
 Prerequisites: [Node.js](https://nodejs.org/) 18+ and npm.
 
 ```bash
-git clone https://github.com/your-org/mindforge.git
-cd mindforge
+git clone https://github.com/Ninso112/MindForge.git
+cd MindForge
 npm install
 npm run dev
 ```
@@ -47,6 +49,15 @@ npm run preview
 ```
 
 The static bundle is written to `dist/` and can be served from any static host.
+
+### Tests
+
+```bash
+npm test          # one-shot
+npm run test:watch
+```
+
+Tests live in `src/__tests__/` and cover the serializer (round-trip + validation), the radial layout, and the reactive store.
 
 ## Usage
 

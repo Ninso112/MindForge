@@ -67,16 +67,26 @@ function main(): void {
     openColorPicker(canvas, renderer, store, detail.nodeId);
   });
 
-  // Persistence: every 30s and on unload.
+  // Persistence: every 30s and on unload. Warn the user once per session
+  // if autosave fails (quota exceeded, private mode, etc.) so they can
+  // export manually before losing work.
   const AUTOSAVE_INTERVAL_MS = 30_000;
-  const interval = window.setInterval(() => saveToLocalStorage(store.getState()), AUTOSAVE_INTERVAL_MS);
+  let quotaWarned = false;
+  const tryAutosave = (): void => {
+    const ok = saveToLocalStorage(store.getState());
+    if (!ok && !quotaWarned) {
+      quotaWarned = true;
+      flashStatus('Autosave failed — please export your map manually');
+    }
+  };
+  const interval = window.setInterval(tryAutosave, AUTOSAVE_INTERVAL_MS);
   window.addEventListener('beforeunload', () => {
     window.clearInterval(interval);
     saveToLocalStorage(store.getState());
   });
   window.addEventListener('mindforge:save', () => {
-    saveToLocalStorage(store.getState());
-    flashStatus('Saved to browser storage');
+    const ok = saveToLocalStorage(store.getState());
+    flashStatus(ok ? 'Saved to browser storage' : 'Save failed — please export manually');
   });
   window.addEventListener('mindforge:new-map', () => newMap(store, input));
 }
@@ -149,6 +159,7 @@ function bindToolbar(
     exportPng(store.getState(), renderer).catch((err: unknown) => {
       // eslint-disable-next-line no-console
       console.warn('PNG export failed:', err);
+      flashStatus(`PNG export failed: ${errMessage(err)}`);
     });
   });
   byId('tb-export-pdf')?.addEventListener('click', () => {
@@ -159,10 +170,16 @@ function bindToolbar(
   });
   byId('tb-import')?.addEventListener('click', () => {
     openFromFile(store.getState().theme)
-      .then((s) => store.replace(s))
+      .then((s) => {
+        store.replace(s);
+        flashStatus('Map imported');
+      })
       .catch((err: unknown) => {
         // eslint-disable-next-line no-console
         console.warn('Import cancelled or failed:', err);
+        if (errMessage(err) !== 'No file selected') {
+          flashStatus(`Import failed: ${errMessage(err)}`);
+        }
       });
   });
   byId('tb-theme')?.addEventListener('click', () => {
@@ -201,6 +218,15 @@ function flashStatus(text: string): void {
   el.textContent = text;
   el.classList.add('mf-status--visible');
   window.setTimeout(() => el.classList.remove('mf-status--visible'), 1800);
+}
+
+/**
+ * Coerce an unknown caught error value to a human-readable string for
+ * display in status toasts.
+ */
+function errMessage(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  return String(err);
 }
 
 main();

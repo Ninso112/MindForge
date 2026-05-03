@@ -91,20 +91,28 @@ export function openColorPicker(
 
   // Defer attaching the outside-click handler to the next tick so the
   // mousedown that triggered the open does not immediately close it.
-  window.setTimeout(() => {
+  // Track the timeout so `close()` can cancel it if the picker is
+  // dismissed before the timer fires (otherwise the listener leaks).
+  let pendingAttach: number | null = window.setTimeout(() => {
+    pendingAttach = null;
     document.addEventListener('mousedown', onDocPointerDown, true);
   }, 0);
   document.addEventListener('keydown', onKeyDown, true);
   window.addEventListener('resize', onResize);
 
   function close(): void {
-    if (activePicker?.close !== close) return;
+    if (pendingAttach !== null) {
+      window.clearTimeout(pendingAttach);
+      pendingAttach = null;
+    }
     document.removeEventListener('mousedown', onDocPointerDown, true);
     document.removeEventListener('keydown', onKeyDown, true);
     window.removeEventListener('resize', onResize);
     unsubscribe();
     if (popover.parentNode) popover.parentNode.removeChild(popover);
-    activePicker = null;
+    if (activePicker?.close === close) {
+      activePicker = null;
+    }
   }
 
   activePicker = { close };
