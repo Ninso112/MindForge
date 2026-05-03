@@ -6,7 +6,6 @@
 
 A fast, keyboard-driven, open-source mind mapping web application — an alternative to MindMup.
 
-**[Live demo →](https://ninso112.github.io/MindForge/)**
 
 ## About
 
