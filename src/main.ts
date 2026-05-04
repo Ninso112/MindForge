@@ -88,6 +88,10 @@ function main(): void {
     const ok = saveToLocalStorage(store.getState());
     flashStatus(ok ? 'Saved to browser storage' : 'Save failed — please export manually');
   });
+  window.addEventListener('mindforge:flash-status', (e) => {
+    const detail = (e as CustomEvent<{ text: string }>).detail;
+    if (detail?.text) flashStatus(detail.text);
+  });
   window.addEventListener('mindforge:new-map', () => newMap(store, input));
 }
 
@@ -142,6 +146,10 @@ function bindToolbar(
   byId('tb-delete')?.addEventListener('click', () => {
     const sel = store.getState().selectedId;
     if (sel) store.deleteNode(sel);
+  });
+  byId('tb-collapse')?.addEventListener('click', () => {
+    const sel = store.getState().selectedId;
+    if (sel) store.toggleCollapsed(sel);
   });
   byId('tb-color')?.addEventListener('click', () => {
     const sel = store.getState().selectedId;
@@ -206,6 +214,11 @@ function bindHelpOverlay(): void {
   });
   document.getElementById('help-close')?.addEventListener('click', () => {
     overlay.classList.remove('mf-help--open');
+  });
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && overlay.classList.contains('mf-help--open')) {
+      overlay.classList.remove('mf-help--open');
+    }
   });
 }
 

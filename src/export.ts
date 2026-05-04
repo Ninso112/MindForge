@@ -233,7 +233,7 @@ export function exportPdf(state: AppState, renderer: Renderer): void {
   const doc = iframe.contentDocument;
   const win = iframe.contentWindow;
   if (!doc || !win) {
-    document.body.removeChild(iframe);
+    if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
     return;
   }
 

@@ -107,7 +107,7 @@ body {
 }
 
 .mf-node__label {
-  fill: #ffffff;
+  fill: var(--mf-fg);
   font-size: 13px;
   font-weight: 500;
   pointer-events: none;

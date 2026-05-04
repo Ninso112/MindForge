@@ -218,7 +218,8 @@ export function openFromFile(currentTheme: 'light' | 'dark'): Promise<AppState> 
       const reader = new FileReader();
       reader.onload = () => {
         try {
-          const text = String(reader.result ?? '');
+          const result = reader.result;
+          const text = typeof result === 'string' ? result : '';
           const parsed = JSON.parse(text);
           resolve(deserialize(parsed, currentTheme));
         } catch (err) {

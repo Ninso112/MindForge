@@ -68,6 +68,7 @@ Click anywhere to start. The root node is created automatically. Press `?` at an
 | --- | --- |
 | Add child node | `Tab` |
 | Add sibling node | `Enter` |
+| Collapse/Expand subtree | `Ctrl` + `Enter` |
 | Edit selected node | `F2` or double-click |
 | Delete node and subtree | `Delete` / `Backspace` |
 | Cancel edit / deselect | `Escape` |

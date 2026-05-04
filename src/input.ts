@@ -191,6 +191,12 @@ export class InputController {
       this.store.redo();
       return;
     }
+    if (ctrl && e.key === 'Enter') {
+      e.preventDefault();
+      const sel = state.selectedId;
+      if (sel) this.store.toggleCollapsed(sel);
+      return;
+    }
     if (ctrl && e.key.toLowerCase() === 's') {
       e.preventDefault();
       window.dispatchEvent(new CustomEvent('mindforge:save'));
@@ -203,7 +209,14 @@ export class InputController {
     }
     if (ctrl && e.key.toLowerCase() === 'o') {
       e.preventDefault();
-      openFromFile(state.theme).then((s) => this.store.replace(s)).catch(() => { /* user cancelled */ });
+      openFromFile(state.theme).then((s) => this.store.replace(s)).catch((err: unknown) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (msg !== 'No file selected') {
+          window.dispatchEvent(new CustomEvent('mindforge:flash-status', {
+            detail: { text: `Import failed: ${msg}` }
+          }));
+        }
+      });
       return;
     }
     if (ctrl && e.shiftKey && e.key.toLowerCase() === 'n') {

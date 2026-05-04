@@ -68,6 +68,9 @@ CLAUDE.md
 .continue/
 .codeium/
 .github-copilot/
+.opencode/
+opencode.json
+.opencode*
 
 # Caches
 .cache/
