@@ -134,13 +134,14 @@ export class InputController {
     // Zoom around the cursor: keep the world point under the cursor fixed.
     const before = this.renderer.screenToWorld(state, e.clientX, e.clientY);
     const newZoom = clamp(state.viewport.zoom * factor, ZOOM_MIN, ZOOM_MAX);
-    this.store.setViewport({ ...state.viewport, zoom: newZoom });
-    const after = this.renderer.screenToWorld(this.store.getState(), e.clientX, e.clientY);
-    const v = this.store.getState().viewport;
+    // Compute the pan adjustment needed to keep the cursor's world point fixed.
+    const dx = before.x * state.viewport.zoom * (1 - newZoom / state.viewport.zoom);
+    const dy = before.y * state.viewport.zoom * (1 - newZoom / state.viewport.zoom);
     this.store.setViewport({
-      ...v,
-      x: v.x + (after.x - before.x) * newZoom,
-      y: v.y + (after.y - before.y) * newZoom
+      ...state.viewport,
+      zoom: newZoom,
+      x: state.viewport.x + dx,
+      y: state.viewport.y + dy
     });
     this.renderer.applyViewport(this.store.getState());
   };
@@ -170,8 +171,8 @@ export class InputController {
     }
 
     if (e.key === ' ') {
+      e.preventDefault();
       this.spaceDown = true;
-      // Don't consume the space here; only suppress its default while panning.
     }
 
     const state = this.store.getState();
