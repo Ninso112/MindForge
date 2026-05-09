@@ -57,7 +57,7 @@ export function radialLayout(state: AppState): Record<string, { x: number; y: nu
     if (!node || node.children.length === 0) return;
 
     const radius = BASE_RADIUS + RADIUS_GROWTH * (depth - 1);
-    const totalWeight = leafWeight(state.nodes, id, weights) - 1;
+    const totalWeight = leafWeight(state.nodes, id, weights);
     let cursor = startAngle;
     const span = endAngle - startAngle;
 
