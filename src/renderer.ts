@@ -73,16 +73,39 @@ function visibleNodes(state: AppState): string[] {
 }
 
 /**
- * Build the SVG `d` attribute for a smooth horizontal bezier curve from
- * one point to another. Used for parent-child edges.
+ * Build the SVG `d` attribute for a smooth bezier curve from one point
+ * to another. Control points are placed along the line connecting the
+ * endpoints so the curve follows the radial direction.
  */
 function bezierPath(x1: number, y1: number, x2: number, y2: number): string {
-  const dx = (x2 - x1) * 0.5;
-  const c1x = x1 + dx;
-  const c1y = y1;
-  const c2x = x2 - dx;
-  const c2y = y2;
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+  if (dist < 0.5) return `M ${x1} ${y1} L ${x2} ${y2}`;
+  const ux = dx / dist;
+  const uy = dy / dist;
+  const t = dist / 3;
+  const c1x = x1 + ux * t;
+  const c1y = y1 + uy * t;
+  const c2x = x2 - ux * t;
+  const c2y = y2 - uy * t;
   return `M ${x1} ${y1} C ${c1x} ${c1y}, ${c2x} ${c2y}, ${x2} ${y2}`;
+}
+
+/**
+ * Compute the point on the perimeter of a node pill (approximated as an
+ * ellipse) in the given direction from its center.
+ */
+function edgePointOnPill(cx: number, cy: number, width: number, height: number, tx: number, ty: number): { x: number; y: number } {
+  const a = width / 2;
+  const b = height / 2;
+  const dist = Math.sqrt(tx * tx + ty * ty);
+  if (dist === 0) return { x: cx + a, y: cy };
+  const nx = tx / dist;
+  const ny = ty / dist;
+  const denom = Math.sqrt((nx / a) ** 2 + (ny / b) ** 2);
+  const t = 1 / denom;
+  return { x: cx + t * nx, y: cy + t * ny };
 }
 
 /**
@@ -177,12 +200,12 @@ export class Renderer {
       if (!parent) continue;
       const ps = nodeSize(parent);
       const ns = nodeSize(node);
-      const x1 = parent.x + ps.width / 2;
-      const y1 = parent.y;
-      const x2 = node.x - ns.width / 2;
-      const y2 = node.y;
+      const dx = node.x - parent.x;
+      const dy = node.y - parent.y;
+      const from = edgePointOnPill(parent.x, parent.y, ps.width, ps.height, dx, dy);
+      const to = edgePointOnPill(node.x, node.y, ns.width, ns.height, -dx, -dy);
       const path = document.createElementNS(SVG_NS, 'path');
-      path.setAttribute('d', bezierPath(x1, y1, x2, y2));
+      path.setAttribute('d', bezierPath(from.x, from.y, to.x, to.y));
       path.setAttribute('class', 'mf-edge');
       const depth = depthOf(state, id, depthCache);
       let stroke: string;

@@ -48,6 +48,25 @@ export class InputController {
     window.addEventListener('keyup', this.onKeyUp);
   }
 
+  /**
+   * Remove all event listeners registered by `attach()`. Call this when
+   * the controller is no longer needed (e.g. test teardown, SPA navigation).
+   */
+  destroy(): void {
+    const svg = this.renderer.getSvg();
+    svg.removeEventListener('mousedown', this.onMouseDown);
+    svg.removeEventListener('dblclick', this.onDoubleClick);
+    window.removeEventListener('mousemove', this.onMouseMove);
+    window.removeEventListener('mouseup', this.onMouseUp);
+    svg.removeEventListener('wheel', this.onWheel);
+    window.removeEventListener('keydown', this.onKeyDown);
+    window.removeEventListener('keyup', this.onKeyUp);
+    if (this.editor) {
+      this.editor.remove();
+      this.editor = null;
+    }
+  }
+
   // ---------------------------------------------------------------------
   // Mouse / pointer
   // ---------------------------------------------------------------------
@@ -142,7 +161,6 @@ export class InputController {
       x: state.viewport.x + dx,
       y: state.viewport.y + dy
     });
-    this.renderer.applyViewport(this.store.getState());
     this.renderer.applyViewport(this.store.getState());
   };
 
