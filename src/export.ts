@@ -5,8 +5,9 @@ import type { AppState, MindNode } from './types.js';
 import { nodeSize } from './renderer.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
-const PADDING = 32;
-/** Pixel ratio for raster export. 2× makes diagonals on retina look right. */
+/** Padding around the visible bounds when exporting. */
+const EXPORT_PADDING = 32;
+/** Pixel ratio for raster export. 2x makes diagonals on retina look right. */
 const PNG_SCALE = 2;
 
 /**
@@ -105,10 +106,10 @@ export function buildExportSvg(
   renderer: Renderer
 ): { svg: string; widthPx: number; heightPx: number } {
   const bounds = visibleBounds(state);
-  const minX = bounds ? bounds.minX - PADDING : -PADDING;
-  const minY = bounds ? bounds.minY - PADDING : -PADDING;
-  const maxX = bounds ? bounds.maxX + PADDING : PADDING;
-  const maxY = bounds ? bounds.maxY + PADDING : PADDING;
+  const minX = bounds ? bounds.minX - EXPORT_PADDING : -EXPORT_PADDING;
+  const minY = bounds ? bounds.minY - EXPORT_PADDING : -EXPORT_PADDING;
+  const maxX = bounds ? bounds.maxX + EXPORT_PADDING : EXPORT_PADDING;
+  const maxY = bounds ? bounds.maxY + EXPORT_PADDING : EXPORT_PADDING;
   const width = Math.max(1, maxX - minX);
   const height = Math.max(1, maxY - minY);
 

@@ -7,6 +7,12 @@ import type { AppState, MindNode, StateListener, Viewport } from './types.js';
  */
 const HISTORY_LIMIT = 100;
 
+/** Default offset for new child nodes relative to parent (px). */
+const CHILD_OFFSET_X = 180;
+
+/** Default offset for new sibling nodes relative to sibling (px). */
+const SIBLING_OFFSET_Y = 80;
+
 /**
  * Generate a UUID v4. Uses `crypto.randomUUID` when available,
  * falls back to a manual implementation for older browsers.
@@ -199,8 +205,8 @@ export class Store {
         label,
         parentId,
         children: [],
-        x: parent.x + 180,
-        y: parent.y,
+      x: parent.x + CHILD_OFFSET_X,
+      y: parent.y,
         collapsed: false,
         pinned: false
       };
@@ -228,8 +234,8 @@ export class Store {
         label,
         parentId,
         children: [],
-        x: sibling.x,
-        y: sibling.y + 80,
+      x: sibling.x,
+      y: sibling.y + SIBLING_OFFSET_Y,
         collapsed: false,
         pinned: false
       };

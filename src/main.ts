@@ -222,6 +222,9 @@ function bindHelpOverlay(): void {
   });
 }
 
+/** Duration the status pill stays visible (ms). */
+const STATUS_DURATION_MS = 1800;
+
 /**
  * Show a transient status message at the bottom of the screen.
  */
@@ -230,7 +233,7 @@ function flashStatus(text: string): void {
   if (!el) return;
   el.textContent = text;
   el.classList.add('mf-status--visible');
-  window.setTimeout(() => el.classList.remove('mf-status--visible'), 1800);
+  window.setTimeout(() => el.classList.remove('mf-status--visible'), STATUS_DURATION_MS);
 }
 
 /**

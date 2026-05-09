@@ -4,6 +4,9 @@ import type { Renderer } from './renderer.js';
 import type { Store } from './state.js';
 import { COLOR_PALETTE } from './colors.js';
 
+/** Margin between the popover and the node/host edge (px). */
+const POPOVER_MARGIN = 8;
+
 /**
  * A single picker can be open at a time. We track it module-locally so a
  * second `openColorPicker` call cleanly closes the previous popover.
@@ -139,25 +142,24 @@ function position(
   const rect = renderer.getNodeScreenRect(store.getState(), nodeId);
   const hostRect = host.getBoundingClientRect();
   const pop = popover.getBoundingClientRect();
-  const margin = 8;
 
   if (!rect) {
-    popover.style.left = `${margin}px`;
-    popover.style.top = `${margin}px`;
+    popover.style.left = `${POPOVER_MARGIN}px`;
+    popover.style.top = `${POPOVER_MARGIN}px`;
     return;
   }
 
   // Prefer below the node; flip above if there is no room.
-  let top = rect.bottom - hostRect.top + margin;
-  if (top + pop.height > hostRect.height - margin) {
-    const above = rect.top - hostRect.top - pop.height - margin;
-    if (above >= margin) top = above;
+  let top = rect.bottom - hostRect.top + POPOVER_MARGIN;
+  if (top + pop.height > hostRect.height - POPOVER_MARGIN) {
+    const above = rect.top - hostRect.top - pop.height - POPOVER_MARGIN;
+    if (above >= POPOVER_MARGIN) top = above;
   }
 
   // Center horizontally on the node, clamp to host.
   const nodeCenterX = rect.left + rect.width / 2 - hostRect.left;
   let left = nodeCenterX - pop.width / 2;
-  left = Math.max(margin, Math.min(left, hostRect.width - pop.width - margin));
+  left = Math.max(POPOVER_MARGIN, Math.min(left, hostRect.width - pop.width - POPOVER_MARGIN));
 
   popover.style.left = `${left}px`;
   popover.style.top = `${top}px`;
