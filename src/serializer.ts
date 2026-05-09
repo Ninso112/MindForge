@@ -5,6 +5,11 @@ import type { AppState, MindNode, SerializedMap } from './types.js';
 const STORAGE_KEY = 'mindforge:autosave';
 const FILE_EXTENSION = '.mindforge';
 
+/** Numeric clamp helper. */
+function clamp(v: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, v));
+}
+
 /**
  * Convert the in-memory app state into the on-disk JSON shape.
  * Selection and editing state are intentionally not serialized.
@@ -48,15 +53,16 @@ export function deserialize(raw: unknown, currentTheme: 'light' | 'dark'): AppSt
   const rootId = obj['rootId'];
   validateGraph(nodes, rootId);
   const vp = obj['viewport'] as Record<string, unknown> | undefined;
+  const rawZoom = typeof vp?.['zoom'] === 'number' ? vp['zoom'] : 1;
   return {
     nodes,
     rootId,
     selectedId: rootId,
     editingId: null,
     viewport: {
-      x: typeof vp?.['x'] === 'number' ? vp['x'] : 0,
-      y: typeof vp?.['y'] === 'number' ? vp['y'] : 0,
-      zoom: typeof vp?.['zoom'] === 'number' ? vp['zoom'] : 1
+      x: typeof vp?.['x'] === 'number' && Number.isFinite(vp['x']) ? vp['x'] : 0,
+      y: typeof vp?.['y'] === 'number' && Number.isFinite(vp['y']) ? vp['y'] : 0,
+      zoom: clamp(rawZoom, 0.1, 3.0)
     },
     theme: currentTheme
   };
@@ -130,7 +136,7 @@ function validateNode(raw: unknown): MindNode {
   if (!Array.isArray(n['children']) || !n['children'].every((c) => typeof c === 'string')) {
     throw new Error(`Node ${String(n['id'])} has invalid children array`);
   }
-  if (typeof n['x'] !== 'number' || typeof n['y'] !== 'number') {
+  if (typeof n['x'] !== 'number' || typeof n['y'] !== 'number' || !Number.isFinite(n['x']) || !Number.isFinite(n['y'])) {
     throw new Error(`Node ${String(n['id'])} has invalid coordinates`);
   }
   const node: MindNode = {
