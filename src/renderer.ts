@@ -161,8 +161,8 @@ export class Renderer {
     this.applyViewport(state);
 
     // Clear.
-    while (this.edgesGroup.firstChild) this.edgesGroup.removeChild(this.edgesGroup.firstChild);
-    while (this.nodesGroup.firstChild) this.nodesGroup.removeChild(this.nodesGroup.firstChild);
+    this.edgesGroup.textContent = '';
+    this.nodesGroup.textContent = '';
 
     const visible = visibleNodes(state);
     const visibleSet = new Set(visible);
