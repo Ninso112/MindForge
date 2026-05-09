@@ -91,7 +91,7 @@ export class InputController {
       const dx = e.clientX - this.pan.startX;
       const dy = e.clientY - this.pan.startY;
       const v = this.store.getState().viewport;
-      this.store.setViewport({ ...v, x: this.pan.vx + dx, y: this.pan.vy + dy });
+      this.store.setViewportOnly({ ...v, x: this.pan.vx + dx, y: this.pan.vy + dy });
       this.renderer.applyViewport(this.store.getState());
       return;
     }
@@ -134,15 +134,15 @@ export class InputController {
     // Zoom around the cursor: keep the world point under the cursor fixed.
     const before = this.renderer.screenToWorld(state, e.clientX, e.clientY);
     const newZoom = clamp(state.viewport.zoom * factor, ZOOM_MIN, ZOOM_MAX);
-    // Compute the pan adjustment needed to keep the cursor's world point fixed.
     const dx = before.x * state.viewport.zoom * (1 - newZoom / state.viewport.zoom);
     const dy = before.y * state.viewport.zoom * (1 - newZoom / state.viewport.zoom);
-    this.store.setViewport({
+    this.store.setViewportOnly({
       ...state.viewport,
       zoom: newZoom,
       x: state.viewport.x + dx,
       y: state.viewport.y + dy
     });
+    this.renderer.applyViewport(this.store.getState());
     this.renderer.applyViewport(this.store.getState());
   };
 

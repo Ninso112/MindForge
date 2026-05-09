@@ -361,6 +361,14 @@ export class Store {
     this.silent(() => this.commit((d) => { d.viewport = v; }));
   }
 
+  /**
+   * Update viewport without notifying listeners. Intended for high-frequency
+   * pan/zoom where the caller will call `Renderer.applyViewport` directly.
+   */
+  setViewportOnly(v: Viewport): void {
+    this.state.viewport = v;
+  }
+
   /** Switch theme. Persisted as part of state. */
   setTheme(theme: 'light' | 'dark'): void {
     this.silent(() => this.commit((d) => { d.theme = theme; }));
