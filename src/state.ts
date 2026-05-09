@@ -389,6 +389,19 @@ export class Store {
   }
 
   /**
+   * Push the current state onto the undo stack without mutating it.
+   * Useful for committing a series of silent changes as a single
+   * undoable step (e.g. after a drag operation).
+   */
+  pushUndo(): void {
+    this.undoStack.push(clone(this.state));
+    if (this.undoStack.length > HISTORY_LIMIT) {
+      this.undoStack.shift();
+    }
+    this.redoStack = [];
+  }
+
+  /**
    * Replace the entire state (e.g. after import). Clears history.
    */
   replace(state: AppState): void {

@@ -110,12 +110,8 @@ export class InputController {
       return;
     }
     if (this.nodeDrag) {
-      // Commit a single history entry for the drag if movement happened.
       if (this.nodeDrag.moved) {
-        const node = this.store.getState().nodes[this.nodeDrag.id];
-        if (node) {
-          this.store.moveNode(this.nodeDrag.id, node.x, node.y, true);
-        }
+        this.store.pushUndo();
       }
       this.nodeDrag = null;
     }
