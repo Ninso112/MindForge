@@ -2,30 +2,49 @@
 
 import type { Renderer } from './renderer.js';
 import type { Store } from './state.js';
+import type { AppState } from './types.js';
 import { radialLayout } from './layout.js';
 import { downloadAsFile, openFromFile } from './serializer.js';
 import { exportPdf, exportPng, exportSvg } from './export.js';
+import { clamp, subtreeIds, visibleBounds } from './utils.js';
 
 const ZOOM_MIN = 0.1;
 const ZOOM_MAX = 3.0;
 const ZOOM_STEP = 1.1;
+/** Screen padding kept around the map when fitting it to the window. */
+const FIT_PADDING = 48;
 
 /**
- * Wire up all keyboard, mouse, and touch interaction. The input layer
- * never owns state; it dispatches into the `Store` and tells the
- * `Renderer` to update viewport transforms during high-frequency
- * gestures (drag, pan, zoom) where a full rebuild would be wasteful.
+ * Wire up all keyboard and pointer (mouse/touch/pen) interaction. The
+ * input layer never owns state; it dispatches into the `Store` and
+ * tells the `Renderer` to update viewport transforms and node positions
+ * during high-frequency gestures (drag, pan, pinch-zoom) where a full
+ * rebuild would be wasteful.
  */
 export class InputController {
   private readonly store: Store;
   private readonly renderer: Renderer;
   private readonly host: HTMLElement;
 
-  // Drag state for moving a single node.
-  private nodeDrag: { id: string; offsetX: number; offsetY: number; moved: boolean } | null = null;
+  // Drag state for moving nodes. `snapshot` holds the pre-drag state so
+  // an actual move can be undone as a single step. `members` is the
+  // dragged node plus — for Shift+drag — its whole subtree.
+  private nodeDrag: {
+    grabX: number;
+    grabY: number;
+    members: { id: string; startX: number; startY: number }[];
+    memberIds: Set<string>;
+    moved: boolean;
+    snapshot: AppState;
+  } | null = null;
   // Pan state for moving the viewport.
   private pan: { startX: number; startY: number; vx: number; vy: number } | null = null;
   private spaceDown = false;
+
+  // Active pointers, tracked for multi-touch pinch gestures.
+  private pointers = new Map<number, { x: number; y: number }>();
+  // Two-finger pinch state: zoom around the gesture midpoint.
+  private pinch: { startDist: number; startZoom: number; worldAtMid: { x: number; y: number } } | null = null;
 
   // Inline edit overlay (a contenteditable div positioned over the node).
   private editor: HTMLDivElement | null = null;
@@ -39,10 +58,11 @@ export class InputController {
 
   private attach(): void {
     const svg = this.renderer.getSvg();
-    svg.addEventListener('mousedown', this.onMouseDown);
+    svg.addEventListener('pointerdown', this.onPointerDown);
     svg.addEventListener('dblclick', this.onDoubleClick);
-    window.addEventListener('mousemove', this.onMouseMove);
-    window.addEventListener('mouseup', this.onMouseUp);
+    window.addEventListener('pointermove', this.onPointerMove);
+    window.addEventListener('pointerup', this.onPointerUp);
+    window.addEventListener('pointercancel', this.onPointerUp);
     svg.addEventListener('wheel', this.onWheel, { passive: false });
     window.addEventListener('keydown', this.onKeyDown);
     window.addEventListener('keyup', this.onKeyUp);
@@ -54,10 +74,11 @@ export class InputController {
    */
   destroy(): void {
     const svg = this.renderer.getSvg();
-    svg.removeEventListener('mousedown', this.onMouseDown);
+    svg.removeEventListener('pointerdown', this.onPointerDown);
     svg.removeEventListener('dblclick', this.onDoubleClick);
-    window.removeEventListener('mousemove', this.onMouseMove);
-    window.removeEventListener('mouseup', this.onMouseUp);
+    window.removeEventListener('pointermove', this.onPointerMove);
+    window.removeEventListener('pointerup', this.onPointerUp);
+    window.removeEventListener('pointercancel', this.onPointerUp);
     svg.removeEventListener('wheel', this.onWheel);
     window.removeEventListener('keydown', this.onKeyDown);
     window.removeEventListener('keyup', this.onKeyUp);
@@ -68,44 +89,73 @@ export class InputController {
   }
 
   // ---------------------------------------------------------------------
-  // Mouse / pointer
+  // Pointer (mouse / touch / pen)
   // ---------------------------------------------------------------------
 
-  private onMouseDown = (e: MouseEvent): void => {
-    if (this.editor) return; // Ignore canvas clicks while editing.
-    const targetNodeId = this.findNodeAt(e.target);
+  private onPointerDown = (e: PointerEvent): void => {
+    this.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (this.pointers.size === 2) {
+      // A second finger switches to pinch-zoom. Finish any single-pointer
+      // drag first so its movement so far stays undoable.
+      this.finishNodeDrag();
+      this.pan = null;
+      this.beginPinch();
+      return;
+    }
+    if (this.pointers.size > 2) return;
+    if (this.editor) return; // Ignore canvas interactions while editing.
 
-    // Middle-click or space+drag → pan.
-    if (e.button === 1 || (e.button === 0 && this.spaceDown) || (e.button === 0 && targetNodeId === null)) {
-      // Only start panning on left-click empty space if space is held,
-      // otherwise treat empty-space click as a deselection.
-      if (e.button === 1 || this.spaceDown) {
-        e.preventDefault();
-        const v = this.store.getState().viewport;
-        this.pan = { startX: e.clientX, startY: e.clientY, vx: v.x, vy: v.y };
-        return;
-      }
-      // Empty-space left click without space: just deselect.
+    const targetNodeId = this.findNodeAt(e.target);
+    const isTouch = e.pointerType === 'touch';
+
+    // Pan: middle-click, space+drag, or a touch starting on empty canvas.
+    if (e.button === 1 || (e.button === 0 && this.spaceDown) || (isTouch && targetNodeId === null)) {
+      e.preventDefault();
+      if (targetNodeId === null) this.store.select(null);
+      const v = this.store.getState().viewport;
+      this.pan = { startX: e.clientX, startY: e.clientY, vx: v.x, vy: v.y };
+      return;
+    }
+
+    // Left-click on empty space without space: just deselect.
+    if (e.button === 0 && targetNodeId === null) {
       this.store.select(null);
       return;
     }
 
     if (e.button !== 0 || targetNodeId === null) return;
 
-    // Left-click on a node → select + start a potential drag.
+    // Left-click/tap on a node → select + start a potential drag.
+    e.preventDefault();
     this.store.select(targetNodeId);
     const node = this.store.getState().nodes[targetNodeId];
     if (!node) return;
     const world = this.renderer.screenToWorld(this.store.getState(), e.clientX, e.clientY);
+    // Shift+drag moves the whole subtree; otherwise just the node.
+    const ids = e.shiftKey ? subtreeIds(this.store.getState(), targetNodeId) : [targetNodeId];
+    const members: { id: string; startX: number; startY: number }[] = [];
+    for (const id of ids) {
+      const n = this.store.getState().nodes[id];
+      if (n) members.push({ id, startX: n.x, startY: n.y });
+    }
     this.nodeDrag = {
-      id: targetNodeId,
-      offsetX: world.x - node.x,
-      offsetY: world.y - node.y,
-      moved: false
+      grabX: world.x,
+      grabY: world.y,
+      members,
+      memberIds: new Set(members.map((m) => m.id)),
+      moved: false,
+      snapshot: this.store.snapshot()
     };
   };
 
-  private onMouseMove = (e: MouseEvent): void => {
+  private onPointerMove = (e: PointerEvent): void => {
+    if (!this.pointers.has(e.pointerId)) return;
+    this.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+    if (this.pinch) {
+      if (this.pointers.size >= 2) this.updatePinch();
+      return;
+    }
     if (this.pan) {
       const dx = e.clientX - this.pan.startX;
       const dy = e.clientY - this.pan.startY;
@@ -116,25 +166,79 @@ export class InputController {
     }
     if (this.nodeDrag) {
       const world = this.renderer.screenToWorld(this.store.getState(), e.clientX, e.clientY);
-      const x = world.x - this.nodeDrag.offsetX;
-      const y = world.y - this.nodeDrag.offsetY;
-      this.store.silent(() => this.store.moveNode(this.nodeDrag!.id, x, y, true));
+      const dx = world.x - this.nodeDrag.grabX;
+      const dy = world.y - this.nodeDrag.grabY;
+      // Cheap path: mutate without notify and patch only the affected
+      // DOM instead of rebuilding the whole SVG per pointer move.
+      for (const m of this.nodeDrag.members) {
+        this.store.moveNodeOnly(m.id, m.startX + dx, m.startY + dy);
+      }
+      this.renderer.updateNodePositions(this.store.getState(), this.nodeDrag.memberIds);
       this.nodeDrag.moved = true;
     }
   };
 
-  private onMouseUp = (_e: MouseEvent): void => {
+  private onPointerUp = (e: PointerEvent): void => {
+    this.pointers.delete(e.pointerId);
+    if (this.pinch) {
+      if (this.pointers.size < 2) this.pinch = null;
+      return;
+    }
+    if (this.pointers.size > 0) return; // Other fingers still active.
     if (this.pan) {
       this.pan = null;
       return;
     }
-    if (this.nodeDrag) {
-      if (this.nodeDrag.moved) {
-        this.store.pushUndo();
-      }
-      this.nodeDrag = null;
-    }
+    this.finishNodeDrag();
   };
+
+  /** End the current node drag, committing one undo step if it moved. */
+  private finishNodeDrag(): void {
+    if (!this.nodeDrag) return;
+    if (this.nodeDrag.moved) {
+      // Commit the pre-drag snapshot so the whole drag undoes in one step.
+      this.store.pushUndo(this.nodeDrag.snapshot);
+    }
+    this.nodeDrag = null;
+  }
+
+  // ---------------------------------------------------------------------
+  // Pinch-zoom (two-finger touch gesture)
+  // ---------------------------------------------------------------------
+
+  private beginPinch(): void {
+    const [p1, p2] = [...this.pointers.values()];
+    if (!p1 || !p2) return;
+    const state = this.store.getState();
+    this.pinch = {
+      startDist: Math.hypot(p2.x - p1.x, p2.y - p1.y),
+      startZoom: state.viewport.zoom,
+      worldAtMid: this.renderer.screenToWorld(state, (p1.x + p2.x) / 2, (p1.y + p2.y) / 2)
+    };
+  }
+
+  private updatePinch(): void {
+    const pinch = this.pinch;
+    if (!pinch) return;
+    const [p1, p2] = [...this.pointers.values()];
+    if (!p1 || !p2) return;
+    const dist = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+    if (pinch.startDist < 1 || dist < 1) return;
+    const zoom = clamp(pinch.startZoom * (dist / pinch.startDist), ZOOM_MIN, ZOOM_MAX);
+    // Keep the world point that was under the initial midpoint fixed
+    // under the current midpoint: V = mid - center - world * zoom.
+    const midX = (p1.x + p2.x) / 2;
+    const midY = (p1.y + p2.y) / 2;
+    const rect = this.renderer.getSvg().getBoundingClientRect();
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    this.store.setViewportOnly({
+      x: midX - cx - pinch.worldAtMid.x * zoom,
+      y: midY - cy - pinch.worldAtMid.y * zoom,
+      zoom
+    });
+    this.renderer.applyViewport(this.store.getState());
+  }
 
   private onDoubleClick = (e: MouseEvent): void => {
     const id = this.findNodeAt(e.target);
@@ -146,12 +250,18 @@ export class InputController {
   private onWheel = (e: WheelEvent): void => {
     if (!e.ctrlKey) return;
     e.preventDefault();
-    const direction = e.deltaY < 0 ? 1 : -1;
-    const factor = direction > 0 ? ZOOM_STEP : 1 / ZOOM_STEP;
-    const state = this.store.getState();
+    const factor = e.deltaY < 0 ? ZOOM_STEP : 1 / ZOOM_STEP;
+    this.zoomAround(e.clientX, e.clientY, factor);
+  };
 
-    // Zoom around the cursor: keep the world point under the cursor fixed.
-    const before = this.renderer.screenToWorld(state, e.clientX, e.clientY);
+  /**
+   * Zoom by `factor` while keeping the world point under the given
+   * screen point fixed (zoom-to-cursor for the wheel, zoom-to-center
+   * for keyboard shortcuts).
+   */
+  private zoomAround(screenX: number, screenY: number, factor: number): void {
+    const state = this.store.getState();
+    const before = this.renderer.screenToWorld(state, screenX, screenY);
     const newZoom = clamp(state.viewport.zoom * factor, ZOOM_MIN, ZOOM_MAX);
     const dx = before.x * state.viewport.zoom * (1 - newZoom / state.viewport.zoom);
     const dy = before.y * state.viewport.zoom * (1 - newZoom / state.viewport.zoom);
@@ -162,7 +272,36 @@ export class InputController {
       y: state.viewport.y + dy
     });
     this.renderer.applyViewport(this.store.getState());
-  };
+  }
+
+  /** Zoom by `factor` around the canvas center (keyboard zoom). */
+  private zoomAtCenter(factor: number): void {
+    const rect = this.renderer.getSvg().getBoundingClientRect();
+    this.zoomAround(rect.left + rect.width / 2, rect.top + rect.height / 2, factor);
+  }
+
+  /**
+   * Fit the whole visible map into the window: zoom (clamped to the
+   * usual range) and pan so the map's bounding box is centered.
+   */
+  fitToView(): void {
+    const state = this.store.getState();
+    const bounds = visibleBounds(state);
+    if (!bounds) return;
+    const { width, height } = this.renderer.getViewportSize();
+    const bw = Math.max(1, bounds.maxX - bounds.minX);
+    const bh = Math.max(1, bounds.maxY - bounds.minY);
+    const zoom = clamp(
+      Math.min((width - 2 * FIT_PADDING) / bw, (height - 2 * FIT_PADDING) / bh),
+      ZOOM_MIN,
+      ZOOM_MAX
+    );
+    // The viewport transform maps world w to screen (C + V + w*zoom),
+    // so centering the bounds' midpoint means V = -midpoint * zoom.
+    const worldCx = (bounds.minX + bounds.maxX) / 2;
+    const worldCy = (bounds.minY + bounds.maxY) / 2;
+    this.store.setViewport({ x: -worldCx * zoom, y: -worldCy * zoom, zoom });
+  }
 
   // ---------------------------------------------------------------------
   // Keyboard
@@ -187,6 +326,10 @@ export class InputController {
       }
       return;
     }
+
+    // Never steal keys from form fields (search box, note editor).
+    const target = e.target;
+    if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) return;
 
     if (e.key === ' ') {
       e.preventDefault();
@@ -220,6 +363,11 @@ export class InputController {
     if (ctrl && e.key.toLowerCase() === 'e') {
       e.preventDefault();
       downloadAsFile(this.store.getState());
+      return;
+    }
+    if (ctrl && e.key.toLowerCase() === 'f') {
+      e.preventDefault();
+      window.dispatchEvent(new CustomEvent('mindforge:open-search'));
       return;
     }
     if (ctrl && e.key.toLowerCase() === 'o') {
@@ -257,6 +405,16 @@ export class InputController {
       exportSvg(state, this.renderer);
       return;
     }
+    if (ctrl && !e.shiftKey && (e.key === '+' || e.key === '=' || e.key === '-' || e.key === '_')) {
+      e.preventDefault();
+      this.zoomAtCenter(e.key === '-' || e.key === '_' ? 1 / ZOOM_STEP : ZOOM_STEP);
+      return;
+    }
+    if (ctrl && !e.shiftKey && e.key === '0') {
+      e.preventDefault();
+      this.fitToView();
+      return;
+    }
 
     if (e.key === '?' || (e.shiftKey && e.key === '/')) {
       e.preventDefault();
@@ -267,6 +425,14 @@ export class InputController {
     if (!ctrl && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'c' && state.selectedId !== null) {
       e.preventDefault();
       window.dispatchEvent(new CustomEvent('mindforge:open-color-picker', {
+        detail: { nodeId: state.selectedId }
+      }));
+      return;
+    }
+
+    if (!ctrl && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'n' && state.selectedId !== null) {
+      e.preventDefault();
+      window.dispatchEvent(new CustomEvent('mindforge:open-note-editor', {
         detail: { nodeId: state.selectedId }
       }));
       return;
@@ -323,15 +489,22 @@ export class InputController {
   // ---------------------------------------------------------------------
 
   private addChildAndEdit(parentId: string): void {
-    const id = this.store.addChild(parentId, '');
-    this.runAutoLayout();
+    // Batched: one notification (hence one re-render) for add + layout.
+    const id = this.store.batch(() => {
+      const newId = this.store.addChild(parentId, '');
+      this.runAutoLayout();
+      return newId;
+    });
     this.beginEdit(id);
   }
 
   private addSiblingAndEdit(siblingId: string): void {
-    const id = this.store.addSibling(siblingId, '');
+    const id = this.store.batch(() => {
+      const newId = this.store.addSibling(siblingId, '');
+      if (newId) this.runAutoLayout();
+      return newId;
+    });
     if (id) {
-      this.runAutoLayout();
       this.beginEdit(id);
     } else {
       // Root has no siblings — fall back to adding a child instead.
@@ -386,7 +559,13 @@ export class InputController {
     if (!node) return;
     const editor = document.createElement('div');
     editor.className = 'mf-editor';
-    editor.contentEditable = 'plaintext-only';
+    try {
+      // 'plaintext-only' avoids rich-text paste artifacts, but Firefox
+      // before 136 throws a SyntaxError on the unknown value — fall back.
+      editor.contentEditable = 'plaintext-only';
+    } catch {
+      editor.contentEditable = 'true';
+    }
     editor.spellcheck = false;
     editor.textContent = node.label;
     this.host.appendChild(editor);
@@ -452,10 +631,5 @@ export class InputController {
     }
     return null;
   }
-}
-
-/** Numeric clamp helper. */
-function clamp(v: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, v));
 }
 

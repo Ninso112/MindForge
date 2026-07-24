@@ -1,18 +1,33 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import './style.css';
-import { Store, createInitialState } from './state.js';
+import { Store } from './state.js';
+import type { AppState } from './types.js';
 import { Renderer } from './renderer.js';
 import { InputController } from './input.js';
 import { radialLayout } from './layout.js';
 import {
   downloadAsFile,
-  loadFromLocalStorage,
+  loadThemePreference,
   openFromFile,
-  saveToLocalStorage
+  saveThemePreference
 } from './serializer.js';
+import {
+  createMap,
+  deleteMap,
+  getActiveMapId,
+  listMaps,
+  loadMapState,
+  migrateLegacyAutosave,
+  renameMap,
+  saveMapState,
+  setActiveMapId
+} from './maps.js';
+import { MapsPanel } from './mapsPanel.js';
 import { exportPdf, exportPng, exportSvg } from './export.js';
 import { openColorPicker } from './colorPicker.js';
+import { openNoteEditor } from './noteEditor.js';
+import { SearchController } from './search.js';
 
 /**
  * Entry point: build the store, renderer, and input controller, wire up
@@ -22,11 +37,15 @@ function main(): void {
   const root = document.getElementById('app');
   if (!root) throw new Error('MindForge: #app container not found');
 
-  // Bootstrap state from localStorage if available.
-  const initialTheme: 'light' | 'dark' =
+  // Bootstrap state from localStorage if available. An explicit theme
+  // choice made in a previous session wins over the OS preference.
+  const systemTheme: 'light' | 'dark' =
     typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
-  const persisted = loadFromLocalStorage(initialTheme);
-  const store = new Store(persisted ?? undefined);
+  const initialTheme = loadThemePreference() ?? systemTheme;
+  migrateLegacyAutosave(initialTheme);
+  const boot = resolveInitialMap(initialTheme);
+  let activeMapId: string = boot.id;
+  const store = new Store(boot.state);
 
   const canvas = document.createElement('div');
   canvas.className = 'mf-canvas';
@@ -35,19 +54,20 @@ function main(): void {
   const renderer = new Renderer(canvas);
   const input = new InputController(store, renderer, canvas);
 
-  // First-time render. Run the auto-layout once so a freshly imported
-  // map (whose pinned flags are honored) has sensible coordinates for
-  // the unpinned root and its children.
-  if (!persisted) {
-    input.runAutoLayout();
-  }
   renderer.render(store.getState());
   applyTheme(store.getState().theme);
 
-  // Re-render on every state change.
+  // Re-render on every state change. Persist the theme whenever it
+  // flips so the choice survives a reload (it is not part of the
+  // serialized map format).
+  let lastTheme = store.getState().theme;
   store.subscribe((state) => {
     renderer.render(state);
     applyTheme(state.theme);
+    if (state.theme !== lastTheme) {
+      lastTheme = state.theme;
+      saveThemePreference(state.theme);
+    }
   });
 
   // Keep node positions in sync when the window resizes (the SVG center
@@ -67,13 +87,95 @@ function main(): void {
     openColorPicker(canvas, renderer, store, detail.nodeId);
   });
 
+  // Search box (Ctrl+F).
+  const search = new SearchController(store, renderer, canvas);
+  window.addEventListener('mindforge:open-search', () => search.open());
+
+  // Note editor open requests come from the input layer / toolbar.
+  window.addEventListener('mindforge:open-note-editor', (e) => {
+    const detail = (e as CustomEvent<{ nodeId: string }>).detail;
+    if (!detail?.nodeId) return;
+    openNoteEditor(canvas, store, detail.nodeId);
+  });
+
+  // ---------------------------------------------------------------------
+  // Multi-map management (maps panel + switch/rename/delete/new events)
+  // ---------------------------------------------------------------------
+
+  const mapsPanel = new MapsPanel(canvas, () => activeMapId);
+  document.getElementById('tb-maps')?.addEventListener('click', () => mapsPanel.open());
+
+  const notifyMapsChanged = (): void => {
+    window.dispatchEvent(new CustomEvent('mindforge:maps-changed'));
+  };
+
+  /** Save the current map, then load and activate another one. */
+  const switchToMap = (id: string): void => {
+    if (id === activeMapId) return;
+    saveMapState(activeMapId, store.getState());
+    const state = loadMapState(id, store.getState().theme);
+    if (!state) {
+      flashStatus('Could not open map');
+      return;
+    }
+    activeMapId = id;
+    setActiveMapId(id);
+    store.replace(state);
+    const name = listMaps().find((m) => m.id === id)?.name ?? 'map';
+    flashStatus(`Opened "${name}"`);
+    notifyMapsChanged();
+  };
+
+  window.addEventListener('mindforge:switch-map', (e) => {
+    const detail = (e as CustomEvent<{ id: string }>).detail;
+    if (detail?.id) switchToMap(detail.id);
+  });
+  window.addEventListener('mindforge:rename-map', (e) => {
+    const detail = (e as CustomEvent<{ id: string; name: string }>).detail;
+    if (!detail?.id || !detail.name) return;
+    renameMap(detail.id, detail.name);
+    notifyMapsChanged();
+  });
+  window.addEventListener('mindforge:delete-map', (e) => {
+    const detail = (e as CustomEvent<{ id: string }>).detail;
+    if (!detail?.id) return;
+    deleteMap(detail.id);
+    if (detail.id === activeMapId) {
+      // The active map is gone — open the next best one or start fresh.
+      const next = listMaps()[0];
+      if (next) {
+        activeMapId = next.id;
+        setActiveMapId(next.id);
+        const state = loadMapState(next.id, store.getState().theme);
+        if (state) store.replace(state);
+      } else {
+        const created = createMap('My Map', store.getState().theme);
+        activeMapId = created.meta.id;
+        store.replace(created.state);
+      }
+    }
+    notifyMapsChanged();
+    flashStatus('Map deleted');
+  });
+  window.addEventListener('mindforge:new-map', () => {
+    const name = window.prompt('Name for the new map:', 'Untitled');
+    if (name === null) return; // Cancelled — keep the current map.
+    // Persist the current map before switching away so nothing is lost.
+    saveMapState(activeMapId, store.getState());
+    const created = createMap(name.trim() || 'Untitled', store.getState().theme);
+    activeMapId = created.meta.id;
+    store.replace(created.state);
+    notifyMapsChanged();
+    flashStatus(`Map "${created.meta.name}" created`);
+  });
+
   // Persistence: every 30s and on unload. Warn the user once per session
   // if autosave fails (quota exceeded, private mode, etc.) so they can
   // export manually before losing work.
   const AUTOSAVE_INTERVAL_MS = 30_000;
   let quotaWarned = false;
   const tryAutosave = (): void => {
-    const ok = saveToLocalStorage(store.getState());
+    const ok = saveMapState(activeMapId, store.getState());
     if (!ok && !quotaWarned) {
       quotaWarned = true;
       flashStatus('Autosave failed — please export your map manually');
@@ -82,32 +184,29 @@ function main(): void {
   const interval = window.setInterval(tryAutosave, AUTOSAVE_INTERVAL_MS);
   window.addEventListener('beforeunload', () => {
     window.clearInterval(interval);
-    saveToLocalStorage(store.getState());
+    saveMapState(activeMapId, store.getState());
   });
   window.addEventListener('mindforge:save', () => {
-    const ok = saveToLocalStorage(store.getState());
+    const ok = saveMapState(activeMapId, store.getState());
     flashStatus(ok ? 'Saved to browser storage' : 'Save failed — please export manually');
   });
   window.addEventListener('mindforge:flash-status', (e) => {
     const detail = (e as CustomEvent<{ text: string }>).detail;
     if (detail?.text) flashStatus(detail.text);
   });
-  window.addEventListener('mindforge:new-map', () => newMap(store, input));
 }
 
 /**
- * Replace the current map with a fresh empty one. If the current map
- * has more than just the root node, ask the user to confirm — the
- * undo stack is cleared by `store.replace`, so this is destructive.
+ * Resolve which map to open at boot: the previously active one when it
+ * still loads, otherwise a fresh default map (covers first run and
+ * dangling active ids).
  */
-function newMap(store: Store, input: InputController): void {
-  const state = store.getState();
-  if (Object.keys(state.nodes).length > 1) {
-    if (!window.confirm('Discard the current map and start a new one?')) return;
-  }
-  store.replace(createInitialState());
-  input.runAutoLayout();
-  flashStatus('New map created');
+function resolveInitialMap(theme: 'light' | 'dark'): { id: string; state: AppState } {
+  const activeId = getActiveMapId();
+  const state = activeId ? loadMapState(activeId, theme) : null;
+  if (state && activeId) return { id: activeId, state };
+  const created = createMap('My Map', theme);
+  return { id: created.meta.id, state: created.state };
 }
 
 /**
@@ -130,17 +229,23 @@ function bindToolbar(
 ): void {
   const byId = (id: string): HTMLElement | null => document.getElementById(id);
 
-  byId('tb-new')?.addEventListener('click', () => newMap(store, input));
+  byId('tb-new')?.addEventListener('click', () => {
+    window.dispatchEvent(new CustomEvent('mindforge:new-map'));
+  });
   byId('tb-add-child')?.addEventListener('click', () => {
     const sel = store.getState().selectedId ?? store.getState().rootId;
-    store.addChild(sel, '');
-    input.runAutoLayout();
+    store.batch(() => {
+      store.addChild(sel, '');
+      input.runAutoLayout();
+    });
   });
   byId('tb-add-sibling')?.addEventListener('click', () => {
     const sel = store.getState().selectedId;
     if (sel) {
-      store.addSibling(sel, '');
-      input.runAutoLayout();
+      store.batch(() => {
+        store.addSibling(sel, '');
+        input.runAutoLayout();
+      });
     }
   });
   byId('tb-delete')?.addEventListener('click', () => {
@@ -155,10 +260,19 @@ function bindToolbar(
     const sel = store.getState().selectedId;
     if (sel) openColorPicker(canvas, renderer, store, sel);
   });
+  byId('tb-note')?.addEventListener('click', () => {
+    const sel = store.getState().selectedId;
+    if (sel) openNoteEditor(canvas, store, sel);
+  });
   byId('tb-reset')?.addEventListener('click', () => {
-    store.resetPins();
-    const positions = radialLayout(store.getState());
-    store.applyLayout(positions);
+    store.batch(() => {
+      store.resetPins();
+      const positions = radialLayout(store.getState());
+      store.applyLayout(positions);
+    });
+  });
+  byId('tb-fit')?.addEventListener('click', () => {
+    input.fitToView();
   });
   byId('tb-export')?.addEventListener('click', () => {
     downloadAsFile(store.getState());
@@ -225,6 +339,10 @@ function bindHelpOverlay(): void {
 /** Duration the status pill stays visible (ms). */
 const STATUS_DURATION_MS = 1800;
 
+/** Pending hide-timer for the status pill; tracked so rapid successive
+ * messages don't get hidden early by a stale timer. */
+let statusTimer: number | null = null;
+
 /**
  * Show a transient status message at the bottom of the screen.
  */
@@ -233,7 +351,11 @@ function flashStatus(text: string): void {
   if (!el) return;
   el.textContent = text;
   el.classList.add('mf-status--visible');
-  window.setTimeout(() => el.classList.remove('mf-status--visible'), STATUS_DURATION_MS);
+  if (statusTimer !== null) window.clearTimeout(statusTimer);
+  statusTimer = window.setTimeout(() => {
+    statusTimer = null;
+    el.classList.remove('mf-status--visible');
+  }, STATUS_DURATION_MS);
 }
 
 /**

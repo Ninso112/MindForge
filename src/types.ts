@@ -21,6 +21,7 @@
  * - `pinned`       When true, the auto-layout will leave the node where it is.
  *                  Set automatically the first time a user drags the node.
  * - `color`        Optional override for the depth-based palette.
+ * - `note`         Optional free-text note attached to the node.
  */
 export interface MindNode {
   id: string;
@@ -32,15 +33,7 @@ export interface MindNode {
   collapsed: boolean;
   pinned: boolean;
   color?: string;
-}
-
-/**
- * A derived edge between a parent and a child. Built on demand by
- * the renderer; not stored.
- */
-export interface Edge {
-  fromId: string;
-  toId: string;
+  note?: string;
 }
 
 /**

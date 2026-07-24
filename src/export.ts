@@ -1,52 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import type { Renderer } from './renderer.js';
-import type { AppState, MindNode } from './types.js';
-import { nodeSize } from './renderer.js';
+import type { AppState } from './types.js';
+import { mapBasename, safeFilename, visibleBounds } from './utils.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 /** Padding around the visible bounds when exporting. */
 const EXPORT_PADDING = 32;
 /** Pixel ratio for raster export. 2x makes diagonals on retina look right. */
 const PNG_SCALE = 2;
-
-/**
- * Compute the world-space axis-aligned bounding box of the visible
- * (non-collapsed) subtree rooted at `state.rootId`.
- */
-function visibleBounds(state: AppState): { minX: number; minY: number; maxX: number; maxY: number } | null {
-  const visible = collectVisible(state);
-  if (visible.length === 0) return null;
-  let minX = Infinity;
-  let minY = Infinity;
-  let maxX = -Infinity;
-  let maxY = -Infinity;
-  for (const n of visible) {
-    const { width, height } = nodeSize(n);
-    minX = Math.min(minX, n.x - width / 2);
-    maxX = Math.max(maxX, n.x + width / 2);
-    minY = Math.min(minY, n.y - height / 2);
-    maxY = Math.max(maxY, n.y + height / 2);
-  }
-  return { minX, minY, maxX, maxY };
-}
-
-function collectVisible(state: AppState): MindNode[] {
-  const out: MindNode[] = [];
-  const stack: string[] = [state.rootId];
-  while (stack.length > 0) {
-    const id = stack.pop()!;
-    const node = state.nodes[id];
-    if (!node) continue;
-    out.push(node);
-    if (node.collapsed) continue;
-    for (let i = node.children.length - 1; i >= 0; i--) {
-      const cid = node.children[i];
-      if (cid !== undefined) stack.push(cid);
-    }
-  }
-  return out;
-}
 
 /**
  * The CSS properties we copy from the live DOM into inline `style`
@@ -160,22 +122,15 @@ function downloadBlob(filename: string, blob: Blob): void {
   setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
-/**
- * Sanitize a filename so it is safe across Linux, Windows, and macOS.
- */
-function safeName(name: string): string {
-  return name.replace(/[^A-Za-z0-9._-]+/g, '_') || 'mindmap';
-}
-
 /** Export the current map as a standalone `.svg` file. */
-export function exportSvg(state: AppState, renderer: Renderer, filename = 'mindmap'): void {
+export function exportSvg(state: AppState, renderer: Renderer, filename = mapBasename(state)): void {
   const { svg } = buildExportSvg(state, renderer);
   const blob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' });
-  downloadBlob(`${safeName(filename)}.svg`, blob);
+  downloadBlob(`${safeFilename(filename)}.svg`, blob);
 }
 
 /** Render the current map to a PNG and trigger a download. */
-export function exportPng(state: AppState, renderer: Renderer, filename = 'mindmap'): Promise<void> {
+export function exportPng(state: AppState, renderer: Renderer, filename = mapBasename(state)): Promise<void> {
   const { svg, widthPx, heightPx } = buildExportSvg(state, renderer);
   return new Promise<void>((resolve, reject) => {
     const blob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' });
@@ -198,7 +153,7 @@ export function exportPng(state: AppState, renderer: Renderer, filename = 'mindm
             reject(new Error('PNG encoding failed'));
             return;
           }
-          downloadBlob(`${safeName(filename)}.png`, pngBlob);
+          downloadBlob(`${safeFilename(filename)}.png`, pngBlob);
           resolve();
         }, 'image/png');
       } catch (err) {
@@ -243,7 +198,7 @@ export function exportPdf(state: AppState, renderer: Renderer): void {
 <html>
 <head>
 <meta charset="utf-8">
-<title>MindForge export</title>
+<title>${mapBasename(state)} — MindForge export</title>
 <style>
   @page { margin: 12mm; }
   html, body { margin: 0; padding: 0; height: 100%; }

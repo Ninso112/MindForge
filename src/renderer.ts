@@ -1,18 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import type { AppState, MindNode } from './types.js';
+import { nodeSize, visibleNodeIds } from './utils.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
-
-/**
- * Approximate width of a node pill given its label. We measure characters
- * with a fixed ratio so the renderer stays cheap; precise text metrics
- * would require off-screen rendering and are not worth the complexity here.
- */
-const CHAR_WIDTH = 8;
-const NODE_HORIZONTAL_PADDING = 16;
-const NODE_HEIGHT = 36;
-const MIN_NODE_WIDTH = 60;
 
 /** CSS variables consumed for depth coloring. Cycles after 6 levels. */
 const DEPTH_COLOR_VARS = [
@@ -23,15 +14,6 @@ const DEPTH_COLOR_VARS = [
   '--mf-depth-5',
   '--mf-depth-6'
 ];
-
-/**
- * Compute the rendered size of a node based on its label.
- */
-export function nodeSize(node: MindNode): { width: number; height: number } {
-  const label = node.label.length === 0 ? ' ' : node.label;
-  const width = Math.max(MIN_NODE_WIDTH, label.length * CHAR_WIDTH + NODE_HORIZONTAL_PADDING * 2);
-  return { width, height: NODE_HEIGHT };
-}
 
 /**
  * Compute depth (0 for root) by walking parent links. Memoizes locally
@@ -51,25 +33,22 @@ function depthOf(state: AppState, id: string, cache: Map<string, number>): numbe
 }
 
 /**
- * Visit nodes from the root in a stable depth-first order, skipping
- * subtrees of collapsed nodes. Returns ids in render order.
+ * Count all descendants of a node (children, grandchildren, ...),
+ * memoized within a single render pass. Used for the badge shown on
+ * collapsed subtrees.
  */
-function visibleNodes(state: AppState): string[] {
-  const result: string[] = [];
-  const stack: string[] = [state.rootId];
-  while (stack.length > 0) {
-    const id = stack.pop()!;
-    const node = state.nodes[id];
-    if (!node) continue;
-    result.push(id);
-    if (node.collapsed) continue;
-    // Push in reverse so children are visited in declared order.
-    for (let i = node.children.length - 1; i >= 0; i--) {
-      const cid = node.children[i];
-      if (cid !== undefined) stack.push(cid);
-    }
+function descendantCount(state: AppState, id: string, cache: Map<string, number>): number {
+  const cached = cache.get(id);
+  if (cached !== undefined) return cached;
+  const node = state.nodes[id];
+  if (!node) {
+    cache.set(id, 0);
+    return 0;
   }
-  return result;
+  let total = 0;
+  for (const c of node.children) total += 1 + descendantCount(state, c, cache);
+  cache.set(id, total);
+  return total;
 }
 
 /**
@@ -90,6 +69,20 @@ function bezierPath(x1: number, y1: number, x2: number, y2: number): string {
   const c2x = x2 - ux * t;
   const c2y = y2 - uy * t;
   return `M ${x1} ${y1} C ${c1x} ${c1y}, ${c2x} ${c2y}, ${x2} ${y2}`;
+}
+
+/**
+ * Compute the bezier `d` attribute for the connector between a parent
+ * and a child node, anchored on their pill perimeters.
+ */
+function edgePathD(parent: MindNode, child: MindNode): string {
+  const ps = nodeSize(parent);
+  const ns = nodeSize(child);
+  const dx = child.x - parent.x;
+  const dy = child.y - parent.y;
+  const from = edgePointOnPill(parent.x, parent.y, ps.width, ps.height, dx, dy);
+  const to = edgePointOnPill(child.x, child.y, ns.width, ns.height, -dx, -dy);
+  return bezierPath(from.x, from.y, to.x, to.y);
 }
 
 /**
@@ -119,6 +112,9 @@ export class Renderer {
   private readonly viewportGroup: SVGGElement;
   private readonly edgesGroup: SVGGElement;
   private readonly nodesGroup: SVGGElement;
+  // Search highlight sets, applied to nodes on subsequent renders.
+  private highlightMatches: ReadonlySet<string> = new Set();
+  private highlightCurrent: string | null = null;
 
   /**
    * Build a new renderer mounted into `container`. Creates the root
@@ -149,6 +145,21 @@ export class Renderer {
   /** Public accessor so input.ts can attach event listeners. */
   getSvg(): SVGSVGElement {
     return this.svg;
+  }
+
+  /** Current on-screen size of the SVG canvas in CSS pixels. */
+  getViewportSize(): { width: number; height: number } {
+    const rect = this.svg.getBoundingClientRect();
+    return { width: rect.width, height: rect.height };
+  }
+
+  /**
+   * Set the search highlight sets applied to subsequently rendered
+   * nodes. Purely presentational — the caller triggers the re-render.
+   */
+  setHighlights(matches: ReadonlySet<string>, current: string | null): void {
+    this.highlightMatches = matches;
+    this.highlightCurrent = current;
   }
 
   /**
@@ -187,9 +198,10 @@ export class Renderer {
     this.edgesGroup.textContent = '';
     this.nodesGroup.textContent = '';
 
-    const visible = visibleNodes(state);
+    const visible = visibleNodeIds(state);
     const visibleSet = new Set(visible);
     const depthCache = new Map<string, number>();
+    const countCache = new Map<string, number>();
 
     // Edges first (so they render below nodes).
     for (const id of visible) {
@@ -198,15 +210,12 @@ export class Renderer {
       if (!visibleSet.has(node.parentId)) continue;
       const parent = state.nodes[node.parentId];
       if (!parent) continue;
-      const ps = nodeSize(parent);
-      const ns = nodeSize(node);
-      const dx = node.x - parent.x;
-      const dy = node.y - parent.y;
-      const from = edgePointOnPill(parent.x, parent.y, ps.width, ps.height, dx, dy);
-      const to = edgePointOnPill(node.x, node.y, ns.width, ns.height, -dx, -dy);
       const path = document.createElementNS(SVG_NS, 'path');
-      path.setAttribute('d', bezierPath(from.x, from.y, to.x, to.y));
+      path.setAttribute('d', edgePathD(parent, node));
       path.setAttribute('class', 'mf-edge');
+      // Endpoint ids allow cheap incremental updates during node drags.
+      path.setAttribute('data-from', parent.id);
+      path.setAttribute('data-to', node.id);
       const depth = depthOf(state, id, depthCache);
       let stroke: string;
       if (node.color) {
@@ -226,7 +235,36 @@ export class Renderer {
       const node = state.nodes[id];
       if (!node) continue;
       const depth = depthOf(state, id, depthCache);
-      this.nodesGroup.appendChild(this.buildNodeElement(state, node, depth));
+      this.nodesGroup.appendChild(this.buildNodeElement(state, node, depth, countCache));
+    }
+  }
+
+  /**
+   * Incrementally update the DOM for nodes whose positions changed,
+   * without rebuilding the scene. Runs at pointer-move frequency during
+   * drags: only node transforms and the `d` of connected edges are
+   * touched. The caller is responsible for a full `render` when
+   * anything else (labels, colors, structure) changed.
+   */
+  updateNodePositions(state: AppState, movedIds: ReadonlySet<string>): void {
+    for (const id of movedIds) {
+      const node = state.nodes[id];
+      if (!node) continue;
+      const g = this.nodesGroup.querySelector<SVGGElement>(`g.mf-node[data-id="${CSS.escape(id)}"]`);
+      if (g) {
+        const { width, height } = nodeSize(node);
+        g.setAttribute('transform', `translate(${node.x - width / 2} ${node.y - height / 2})`);
+      }
+    }
+    const paths = this.edgesGroup.querySelectorAll<SVGPathElement>('path.mf-edge');
+    for (const path of paths) {
+      const fromId = path.getAttribute('data-from');
+      const toId = path.getAttribute('data-to');
+      if (!fromId || !toId) continue;
+      if (!movedIds.has(fromId) && !movedIds.has(toId)) continue;
+      const parent = state.nodes[fromId];
+      const child = state.nodes[toId];
+      if (parent && child) path.setAttribute('d', edgePathD(parent, child));
     }
   }
 
@@ -235,7 +273,7 @@ export class Renderer {
    * label, and click target. Caller is responsible for re-rendering on
    * any state change.
    */
-  private buildNodeElement(state: AppState, node: MindNode, depth: number): SVGGElement {
+  private buildNodeElement(state: AppState, node: MindNode, depth: number, countCache: Map<string, number>): SVGGElement {
     const { width, height } = nodeSize(node);
     const g = document.createElementNS(SVG_NS, 'g');
     g.setAttribute('class', 'mf-node');
@@ -244,6 +282,8 @@ export class Renderer {
     if (state.selectedId === node.id) g.classList.add('mf-node--selected');
     if (state.editingId === node.id) g.classList.add('mf-node--editing');
     if (node.id === state.rootId) g.classList.add('mf-node--root');
+    if (this.highlightMatches.has(node.id)) g.classList.add('mf-node--match');
+    if (this.highlightCurrent === node.id) g.classList.add('mf-node--current');
 
     const rect = document.createElementNS(SVG_NS, 'rect');
     rect.setAttribute('x', '0');
@@ -276,6 +316,36 @@ export class Renderer {
       text.setAttribute('visibility', 'hidden');
     }
     g.appendChild(text);
+
+    // Nodes with a note get a small indicator icon at the left padding.
+    if (node.note && node.note.length > 0) {
+      const icon = document.createElementNS(SVG_NS, 'path');
+      icon.setAttribute('d', 'M 0 -4 h 8 M 0 0 h 8 M 0 4 h 5');
+      icon.setAttribute('class', 'mf-node__note-icon');
+      icon.setAttribute('transform', `translate(12 ${height / 2})`);
+      g.appendChild(icon);
+    }
+
+    // Collapsed subtrees get a badge with the hidden descendant count.
+    if (node.collapsed && node.children.length > 0) {
+      g.classList.add('mf-node--collapsed');
+      const count = descendantCount(state, node.id, countCache);
+      if (count > 0) {
+        const badge = document.createElementNS(SVG_NS, 'g');
+        badge.setAttribute('class', 'mf-node__badge');
+        badge.setAttribute('transform', `translate(${width} ${height / 2})`);
+        const circle = document.createElementNS(SVG_NS, 'circle');
+        circle.setAttribute('r', '10');
+        const badgeText = document.createElementNS(SVG_NS, 'text');
+        badgeText.setAttribute('text-anchor', 'middle');
+        badgeText.setAttribute('dominant-baseline', 'central');
+        badgeText.setAttribute('class', 'mf-node__badge-text');
+        badgeText.textContent = String(count);
+        badge.appendChild(circle);
+        badge.appendChild(badgeText);
+        g.appendChild(badge);
+      }
+    }
 
     return g;
   }

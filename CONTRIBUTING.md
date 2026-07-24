@@ -28,14 +28,23 @@ npm run preview
 
 ```
 src/
-├── main.ts        # bootstrap
+├── main.ts        # bootstrap + toolbar/event wiring
 ├── types.ts       # core interfaces
 ├── state.ts       # reactive store + undo/redo
 ├── renderer.ts    # SVG rendering
-├── input.ts       # keyboard/mouse/touch handlers
+├── input.ts       # keyboard/pointer (mouse/touch) handlers
 ├── layout.ts      # radial auto-layout
-├── serializer.ts  # JSON import/export
-└── style.css      # theme variables and global styles
+├── serializer.ts  # JSON import/export + theme preference
+├── export.ts      # PNG/PDF/SVG export
+├── maps.ts        # multi-map localStorage layer
+├── mapsPanel.ts   # "My maps" panel UI
+├── search.ts      # Ctrl+F label search
+├── noteEditor.ts  # per-node note panel
+├── colorPicker.ts # color popover
+├── colors.ts      # 32-color palette
+├── utils.ts       # shared helpers (geometry, filenames, visibility)
+├── style.css      # theme variables and global styles
+└── __tests__/     # vitest suites
 ```
 
 Keep modules focused. If a file starts mixing concerns (e.g. rendering and state mutation), split it.

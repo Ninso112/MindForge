@@ -97,6 +97,13 @@ export class Store {
    * history — wrap those in `silent`.
    */
   private recordHistory = true;
+  /**
+   * Batching depth: while > 0, `commit` applies mutations but defers
+   * listener notification until the outermost `batch` call returns.
+   */
+  private batchDepth = 0;
+  /** Whether any commit happened inside the current batch. */
+  private batchDirty = false;
 
   constructor(initial?: AppState) {
     this.state = initial ?? createInitialState();
@@ -133,6 +140,26 @@ export class Store {
   }
 
   /**
+   * Run several mutators as one atomic update: each `commit` inside
+   * still applies (and records history) individually, but listeners
+   * are notified only once when the outermost batch finishes. Use for
+   * compound actions like "add node + re-layout" to avoid rendering
+   * intermediate states.
+   */
+  batch<T>(fn: () => T): T {
+    this.batchDepth++;
+    try {
+      return fn();
+    } finally {
+      this.batchDepth--;
+      if (this.batchDepth === 0 && this.batchDirty) {
+        this.batchDirty = false;
+        this.notify();
+      }
+    }
+  }
+
+  /**
    * Apply a mutation to the state, optionally pushing the previous
    * snapshot onto the undo stack and clearing the redo stack.
    */
@@ -147,7 +174,11 @@ export class Store {
     }
     mutator(next);
     this.state = next;
-    this.notify();
+    if (this.batchDepth > 0) {
+      this.batchDirty = true;
+    } else {
+      this.notify();
+    }
   }
 
   private notify(): void {
@@ -205,8 +236,8 @@ export class Store {
         label,
         parentId,
         children: [],
-      x: parent.x + CHILD_OFFSET_X,
-      y: parent.y,
+        x: parent.x + CHILD_OFFSET_X,
+        y: parent.y,
         collapsed: false,
         pinned: false
       };
@@ -234,8 +265,8 @@ export class Store {
         label,
         parentId,
         children: [],
-      x: sibling.x,
-      y: sibling.y + SIBLING_OFFSET_Y,
+        x: sibling.x,
+        y: sibling.y + SIBLING_OFFSET_Y,
         collapsed: false,
         pinned: false
       };
@@ -309,6 +340,26 @@ export class Store {
   }
 
   /**
+   * Attach or clear a free-text note on a node. Pass `null` (or a
+   * blank string) to remove it. Records history so it is undoable.
+   */
+  setNodeNote(id: string, note: string | null): void {
+    if (!this.state.nodes[id]) return;
+    const normalized = note && note.trim().length > 0 ? note : null;
+    const cur = this.state.nodes[id]?.note ?? null;
+    if (cur === normalized) return;
+    this.commit((d) => {
+      const n = d.nodes[id];
+      if (!n) return;
+      if (normalized === null) {
+        delete n.note;
+      } else {
+        n.note = normalized;
+      }
+    });
+  }
+
+  /**
    * Move a node to absolute world coordinates. Sets `pinned = true` so
    * subsequent auto-layout passes leave it alone. Use within `silent`
    * for drag operations to avoid spamming undo history; the caller
@@ -324,6 +375,21 @@ export class Store {
       node.y = y;
       if (pin) node.pinned = true;
     });
+  }
+
+  /**
+   * Move a node without cloning the state or notifying listeners.
+   * Intended for pointer-move frequency during drags — the caller
+   * updates the DOM directly via `Renderer.updateNodePositions` and
+   * commits the result (with a pre-drag `pushUndo` snapshot) once the
+   * gesture ends. Always pins the node, like `moveNode`.
+   */
+  moveNodeOnly(id: string, x: number, y: number): void {
+    const n = this.state.nodes[id];
+    if (!n) return;
+    n.x = x;
+    n.y = y;
+    n.pinned = true;
   }
 
   /**
@@ -403,12 +469,23 @@ export class Store {
   }
 
   /**
-   * Push the current state onto the undo stack without mutating it.
-   * Useful for committing a series of silent changes as a single
-   * undoable step (e.g. after a drag operation).
+   * Return a deep clone of the current state for later use with
+   * `pushUndo(snapshot)`. Capture this *before* a series of silent
+   * mutations (e.g. at the start of a drag) so the pre-mutation
+   * state can be committed as a single undoable step afterwards.
    */
-  pushUndo(): void {
-    this.undoStack.push(clone(this.state));
+  snapshot(): AppState {
+    return clone(this.state);
+  }
+
+  /**
+   * Push a state onto the undo stack without mutating the current one.
+   * Pass a `snapshot` captured via `this.snapshot()` to make a series
+   * of silent changes undoable as a single step (e.g. after a drag);
+   * omit it to push the current state as-is.
+   */
+  pushUndo(snapshot?: AppState): void {
+    this.undoStack.push(snapshot ?? clone(this.state));
     if (this.undoStack.length > HISTORY_LIMIT) {
       this.undoStack.shift();
     }

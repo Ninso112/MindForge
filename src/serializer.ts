@@ -1,14 +1,15 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import type { AppState, MindNode, SerializedMap } from './types.js';
+import { clamp, mapBasename, safeFilename } from './utils.js';
 
-const STORAGE_KEY = 'mindforge:autosave';
+/**
+ * Pre-multi-map autosave key. Migrated into the maps index by
+ * `maps.ts` on first boot after the multi-map update.
+ */
+export const LEGACY_AUTOSAVE_KEY = 'mindforge:autosave';
+const THEME_KEY = 'mindforge:theme';
 const FILE_EXTENSION = '.mindforge';
-
-/** Numeric clamp helper. */
-function clamp(v: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, v));
-}
 
 /**
  * Convert the in-memory app state into the on-disk JSON shape.
@@ -150,55 +151,50 @@ function validateNode(raw: unknown): MindNode {
     pinned: typeof n['pinned'] === 'boolean' ? n['pinned'] : false
   };
   if (typeof n['color'] === 'string') node.color = n['color'];
+  if (typeof n['note'] === 'string') node.note = n['note'];
   return node;
 }
 
 /**
- * Persist the current state to `localStorage`. Returns `true` on success,
- * `false` when the write fails (e.g. `QuotaExceededError`, private-mode
- * restrictions). Callers can surface a UI warning on `false` so the user
- * knows their autosave was lost.
+ * Persist the user's explicit theme choice. Kept separate from the map
+ * autosave because the `.mindforge` file format intentionally does not
+ * carry theme information.
  */
-export function saveToLocalStorage(state: AppState): boolean {
+export function saveThemePreference(theme: 'light' | 'dark'): void {
   try {
-    const data = JSON.stringify(serialize(state));
-    localStorage.setItem(STORAGE_KEY, data);
-    return true;
+    localStorage.setItem(THEME_KEY, theme);
   } catch (err) {
     // eslint-disable-next-line no-console
-    console.warn('MindForge: localStorage save failed', err);
-    return false;
+    console.warn('MindForge: theme preference save failed', err);
   }
 }
 
 /**
- * Read the previous session from `localStorage`, if any.
- * Returns `null` when no autosave exists or it cannot be parsed.
+ * Read the persisted theme choice, or `null` when the user never
+ * toggled the theme (or storage is unavailable) — callers then fall
+ * back to `prefers-color-scheme`.
  */
-export function loadFromLocalStorage(currentTheme: 'light' | 'dark'): AppState | null {
+export function loadThemePreference(): 'light' | 'dark' | null {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw === null) return null;
-    return deserialize(JSON.parse(raw), currentTheme);
-  } catch (err) {
-    // eslint-disable-next-line no-console
-    console.warn('MindForge: localStorage load failed', err);
+    const raw = localStorage.getItem(THEME_KEY);
+    return raw === 'light' || raw === 'dark' ? raw : null;
+  } catch {
     return null;
   }
 }
 
 /**
  * Trigger a browser download of the serialized map. The filename
- * is sanitized so it works on Linux, Windows, and macOS.
+ * defaults to the root node's label and is sanitized so it works
+ * on Linux, Windows, and macOS.
  */
-export function downloadAsFile(state: AppState, filename = 'mindmap'): void {
-  const safe = filename.replace(/[^A-Za-z0-9._-]+/g, '_') || 'mindmap';
+export function downloadAsFile(state: AppState, filename = mapBasename(state)): void {
   const data = JSON.stringify(serialize(state), null, 2);
   const blob = new Blob([data], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `${safe}${FILE_EXTENSION}`;
+  a.download = `${safeFilename(filename)}${FILE_EXTENSION}`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);

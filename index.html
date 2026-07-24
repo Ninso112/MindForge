@@ -14,6 +14,7 @@
     <div id="app"></div>
 
     <nav class="mf-toolbar" aria-label="MindForge toolbar">
+      <button id="tb-maps" type="button" title="My maps">Maps</button>
       <button id="tb-new" type="button" title="New map (Ctrl+Shift+N)">New</button>
       <span class="mf-toolbar__sep" aria-hidden="true"></span>
       <button id="tb-add-child" type="button" title="Add child (Tab)">+ Child</button>
@@ -21,8 +22,10 @@
       <button id="tb-delete" type="button" title="Delete node (Del)">Delete</button>
       <button id="tb-collapse" type="button" title="Collapse/Expand subtree (Ctrl+Enter)">Collapse</button>
       <button id="tb-color" type="button" title="Color (C)">Color</button>
+      <button id="tb-note" type="button" title="Edit note (N)">Note</button>
       <span class="mf-toolbar__sep" aria-hidden="true"></span>
       <button id="tb-reset" type="button" title="Reset layout">Reset Layout</button>
+      <button id="tb-fit" type="button" title="Fit map to window (Ctrl+0)">Fit</button>
       <button id="tb-export" type="button" title="Export JSON (Ctrl+E)">Export</button>
       <button id="tb-export-png" type="button" title="Export PNG (Ctrl+Shift+P)">PNG</button>
       <button id="tb-export-pdf" type="button" title="Export PDF (Ctrl+Shift+D)">PDF</button>
@@ -45,17 +48,24 @@
             <tr><td><kbd>Enter</kbd></td><td>Add sibling node</td></tr>
             <tr><td><kbd>Ctrl</kbd>+<kbd>Enter</kbd></td><td>Collapse/Expand subtree</td></tr>
             <tr><td><kbd>F2</kbd> or double-click</td><td>Edit selected node</td></tr>
+            <tr><td><kbd>N</kbd></td><td>Edit note for selected node</td></tr>
             <tr><td><kbd>Delete</kbd> / <kbd>Backspace</kbd></td><td>Delete node and subtree</td></tr>
             <tr><td><kbd>Esc</kbd></td><td>Cancel edit / deselect</td></tr>
             <tr><td>Arrow keys</td><td>Navigate between nodes</td></tr>
+            <tr><td><kbd>Ctrl</kbd>+<kbd>F</kbd></td><td>Search nodes (Enter/Shift+Enter cycles)</td></tr>
             <tr><td>Drag</td><td>Move node freely (pins it)</td></tr>
+            <tr><td><kbd>Shift</kbd>+Drag</td><td>Move node with its whole subtree</td></tr>
             <tr><td>Middle-click drag / <kbd>Space</kbd>+drag</td><td>Pan canvas</td></tr>
+            <tr><td>One-finger drag (touch)</td><td>Pan canvas</td></tr>
+            <tr><td>Pinch (touch)</td><td>Zoom in / out</td></tr>
             <tr><td><kbd>Ctrl</kbd> + Scroll</td><td>Zoom in / out</td></tr>
+            <tr><td><kbd>Ctrl</kbd>+<kbd>+</kbd> / <kbd>Ctrl</kbd>+<kbd>−</kbd></td><td>Zoom in / out (keyboard)</td></tr>
+            <tr><td><kbd>Ctrl</kbd>+<kbd>0</kbd></td><td>Fit map to window</td></tr>
             <tr><td><kbd>Ctrl</kbd>+<kbd>Z</kbd> / <kbd>Ctrl</kbd>+<kbd>Y</kbd></td><td>Undo / redo</td></tr>
             <tr><td><kbd>Ctrl</kbd>+<kbd>S</kbd></td><td>Save to localStorage</td></tr>
             <tr><td><kbd>Ctrl</kbd>+<kbd>E</kbd></td><td>Export as JSON</td></tr>
             <tr><td><kbd>Ctrl</kbd>+<kbd>O</kbd></td><td>Import JSON</td></tr>
-            <tr><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>N</kbd></td><td>New empty map</td></tr>
+            <tr><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>N</kbd></td><td>New map (kept in the Maps list)</td></tr>
             <tr><td><kbd>C</kbd></td><td>Open color picker for selected node</td></tr>
             <tr><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd></td><td>Export as PNG</td></tr>
             <tr><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>D</kbd></td><td>Export as PDF (print dialog)</td></tr>

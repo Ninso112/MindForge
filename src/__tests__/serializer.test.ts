@@ -87,4 +87,20 @@ describe('serializer', () => {
     const bad = buildMap([n('r', 'x'), n('x', null, ['r'])], 'r');
     expect(() => deserialize(bad, 'dark')).toThrow(/root must have parentId/);
   });
+
+  it('round-trips node notes and colors', () => {
+    const withExtras: MindNode = { ...n('r', null), note: 'hello **world**', color: '#ff0000' };
+    const state = deserialize(buildMap([withExtras], 'r'), 'dark');
+    expect(state.nodes['r']?.note).toBe('hello **world**');
+    expect(state.nodes['r']?.color).toBe('#ff0000');
+    const again = deserialize(JSON.parse(JSON.stringify(serialize(state))), 'dark');
+    expect(again.nodes['r']?.note).toBe('hello **world**');
+    expect(again.nodes['r']?.color).toBe('#ff0000');
+  });
+
+  it('defaults missing note/color to undefined', () => {
+    const state = deserialize(buildMap([n('r', null)], 'r'), 'dark');
+    expect(state.nodes['r']?.note).toBeUndefined();
+    expect(state.nodes['r']?.color).toBeUndefined();
+  });
 });
